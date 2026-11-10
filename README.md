@@ -4,6 +4,8 @@ Letters to the future, for Flarum 2. Members write a letter, add photos, and pic
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg) [![Latest Stable Version](https://img.shields.io/packagist/v/ernestdefoe/time-capsule.svg)](https://packagist.org/packages/ernestdefoe/time-capsule)
 
+![Time Capsule](screenshots/page.png)
+
 - **Write to your future self.** A letter, up to four photos, and an open date: one tap for next New Year, 1, 5 or 10 years, or the forum's next birthday, or any date you like.
 - **Really sealed.** Until its day a letter is a card: an envelope with a wax seal, "Opens in 3 years, 2 months", and how far along it is. Its words and photos aren't sent to anyone, the writer included, unless they chose "let me reread it".
 - **Encrypted at rest.** Letters and photos are encrypted with a key that is never in the database, so a look at the tables, or a database backup, reads nothing. Photos are kept outside the public folder and their location data is dropped.
@@ -13,6 +15,10 @@ Letters to the future, for Flarum 2. Members write a letter, add photos, and pic
 - **Safe to run.** Opening is idempotent: the scheduler can run every minute, overlap a page load, or crash halfway, and nobody is notified twice or gets two discussions. Forums without a running scheduler still open letters when they're viewed.
 - **Permissions** to view, write letters, run the community capsule and delete letters as a moderator.
 - **GDPR**: with Flarum's GDPR extension, a member's letters are in their data export (sealed ones as their card) and are deleted on erasure.
+
+| A letter, opened | Writing one |
+|---|---|
+| ![An opened letter with photos](screenshots/letter.png) | ![The letter form](screenshots/write.png) |
 
 ## Back up the key
 
