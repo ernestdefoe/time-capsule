@@ -1,0 +1,1082 @@
+// Time Capsule. Every colour comes from Flarum's custom properties, so
+// themes, coloured headers and dark mode carry through. Selectors start at
+// .TimeCapsulePage (or the modal) so a theme's link and heading rules don't win.
+
+@tc-paper: color-mix(in srgb, var(--primary-color) 7%, var(--body-bg));
+@tc-paper-deep: color-mix(in srgb, var(--primary-color) 16%, var(--body-bg));
+@tc-line: color-mix(in srgb, var(--muted-color) 14%, transparent);
+@tc-wax: var(--primary-color);
+
+.TimeCapsulePage {
+  color: var(--text-color);
+
+  .TimeCapsulePage-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    color: var(--muted-color);
+    font-weight: 600;
+
+    &:hover {
+      color: var(--text-color);
+      text-decoration: none;
+    }
+  }
+
+  .TimeCapsulePage-message {
+    color: var(--muted-color);
+    text-align: center;
+    padding: 30px 0;
+  }
+}
+
+// ---- hero and stats ----
+
+.TimeCapsulePage .TimeCapsuleHero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 28px 30px;
+  margin-bottom: 24px;
+  border-radius: var(--border-radius);
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--primary-color) 18%, transparent), transparent 55%),
+    @tc-paper;
+  color: var(--text-color);
+
+  .TimeCapsuleHero-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .TimeCapsuleHero-title {
+    margin: 0 0 6px;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--heading-color);
+  }
+
+  .TimeCapsuleHero-intro {
+    margin: 0 0 12px;
+    color: var(--muted-color);
+    font-size: 15px;
+    max-width: 60ch;
+  }
+
+  .TimeCapsuleHero-action {
+    flex-shrink: 0;
+  }
+}
+
+.TimeCapsulePage .TimeCapsuleStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted-color);
+  font-size: 13px;
+  font-weight: 600;
+
+  li + li::before {
+    content: '·';
+    margin: 0 8px;
+  }
+}
+
+// ---- community capsule ----
+
+.TimeCapsulePage .TimeCapsuleCommunity {
+  position: relative;
+  text-align: center;
+  padding: 28px 24px 24px;
+  margin-bottom: 28px;
+  border: 1px solid var(--control-bg);
+  border-radius: var(--border-radius);
+  background: var(--body-bg);
+  color: var(--text-color);
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: repeating-linear-gradient(-45deg, @tc-wax 0 12px, transparent 12px 22px);
+    opacity: 0.6;
+  }
+
+  .TimeCapsuleCommunity-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: @tc-paper-deep;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .TimeCapsuleCommunity-title {
+    margin: 12px 0 6px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--heading-color);
+
+    a {
+      color: var(--heading-color);
+    }
+  }
+
+  .TimeCapsuleCommunity-description {
+    margin: 0 auto 6px;
+    max-width: 60ch;
+    color: var(--muted-color);
+    white-space: pre-line;
+  }
+
+  .TimeCapsuleCommunity-when {
+    margin: 0 0 16px;
+    color: var(--muted-color);
+    font-size: 13px;
+  }
+
+  .TimeCapsuleCommunity-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .TimeCapsuleCommunity-delete {
+    color: var(--muted-color);
+  }
+
+  &--empty p,
+  &--opened p {
+    color: var(--muted-color);
+  }
+
+  &--empty p {
+    margin: 12px auto 14px;
+    max-width: 55ch;
+  }
+}
+
+.TimeCapsuleCountdown {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 12px;
+
+  .TimeCapsuleCountdown-part {
+    min-width: 70px;
+    padding: 10px 8px 8px;
+    border-radius: var(--border-radius);
+    background: @tc-paper;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .TimeCapsuleCountdown-value {
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--heading-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .TimeCapsuleCountdown-unit {
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-color);
+  }
+}
+
+// ---- sections and cards ----
+
+.TimeCapsulePage .TimeCapsuleSection {
+  margin-bottom: 32px;
+
+  .TimeCapsuleSection-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--heading-color);
+
+    .icon {
+      color: var(--muted-color);
+    }
+  }
+
+  .TimeCapsuleSection-count {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--control-bg);
+    color: var(--control-color);
+    font-size: 12px;
+  }
+
+  .TimeCapsuleSection-empty {
+    color: var(--muted-color);
+  }
+}
+
+.TimeCapsulePage .TimeCapsuleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(~"min(260px, 100%)", 1fr));
+  gap: 16px;
+}
+
+.TimeCapsulePage .TimeCapsuleEmpty {
+  text-align: center;
+  padding: 30px 20px;
+  border: 2px dashed var(--control-bg);
+  border-radius: var(--border-radius);
+  color: var(--muted-color);
+
+  > .icon {
+    font-size: 32px;
+    opacity: 0.6;
+  }
+
+  p {
+    margin: 10px auto 14px;
+    max-width: 50ch;
+  }
+}
+
+.TimeCapsulePage .TimeCapsuleCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--control-bg);
+  border-radius: var(--border-radius);
+  background: var(--body-bg);
+  color: var(--text-color);
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px var(--shadow-color);
+  }
+
+  .TimeCapsuleCard-body {
+    padding: 14px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .TimeCapsuleCard-title {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--heading-color);
+    overflow-wrap: anywhere;
+  }
+
+  .TimeCapsuleCard-opens {
+    margin: 0 0 10px;
+    display: flex;
+    flex-direction: column;
+
+    strong {
+      font-size: 17px;
+      color: var(--text-color);
+    }
+  }
+
+  .TimeCapsuleCard-date {
+    color: var(--muted-color);
+    font-size: 13px;
+  }
+
+  .TimeCapsuleCard-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--muted-color);
+    font-size: 12px;
+
+    .icon {
+      margin-right: 3px;
+      opacity: 0.8;
+    }
+  }
+
+  .TimeCapsuleCard-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 10px;
+  }
+
+  .TimeCapsuleCard-locked {
+    color: var(--muted-color);
+    font-size: 12px;
+  }
+
+  .Button--text {
+    padding-left: 0;
+    padding-right: 0;
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .TimeCapsuleCard-delete {
+    color: var(--muted-color);
+    margin-left: auto;
+  }
+}
+
+// The envelope: paper, a folded flap, a wax seal.
+.TimeCapsuleEnvelope {
+  position: relative;
+  height: 86px;
+  background: @tc-paper;
+  border-bottom: 1px solid var(--control-bg);
+
+  .TimeCapsuleEnvelope-flap {
+    position: absolute;
+    inset: 0;
+    background: @tc-paper-deep;
+    clip-path: polygon(0 0, 100% 0, 50% 78%);
+  }
+
+  .TimeCapsuleSeal {
+    position: absolute;
+    left: 50%;
+    top: 58%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+.TimeCapsuleSeal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, #fff 22%, @tc-wax), @tc-wax 60%, color-mix(in srgb, #000 25%, @tc-wax));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, @tc-wax 35%, transparent),
+    0 2px 6px var(--shadow-color);
+  color: #fff;
+  font-size: 16px;
+}
+
+.TimeCapsulePage .TimeCapsuleProgress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--control-bg);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--primary-color);
+  }
+}
+
+.TimeCapsulePage .TimeCapsuleCard--opened {
+  padding: 14px 16px 10px;
+
+  &.is-new {
+    border-color: var(--primary-color);
+  }
+
+  .TimeCapsuleCard-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    min-width: 0;
+
+    > div {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
+  .TimeCapsuleCard-who {
+    font-weight: 700;
+
+    a {
+      color: var(--text-color);
+    }
+  }
+
+  .TimeCapsuleCard-when {
+    color: var(--muted-color);
+    font-size: 12px;
+  }
+
+  .TimeCapsuleCard-link {
+    display: block;
+    color: var(--text-color);
+
+    &:hover {
+      text-decoration: none;
+
+      .TimeCapsuleCard-title {
+        color: var(--primary-color);
+      }
+    }
+  }
+
+  .TimeCapsuleCard-excerpt {
+    margin: 0;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    color: var(--text-color);
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .TimeCapsuleCard-photos {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin-top: 10px;
+
+    img {
+      width: 100%;
+      aspect-ratio: 1;
+      height: auto;
+      object-fit: cover;
+      border-radius: 4px;
+      background: var(--control-bg);
+    }
+  }
+
+  .TimeCapsuleCard-foot {
+    display: flex;
+    gap: 16px;
+    margin-top: auto;
+    padding-top: 8px;
+  }
+}
+
+.TimeCapsulePage .TimeCapsuleBadge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-color);
+  color: var(--body-bg);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.TimeCapsulePage .TimeCapsulePast {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  a {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 12px 14px;
+    border-radius: var(--border-radius);
+    color: var(--text-color);
+
+    &:hover {
+      background: var(--control-bg);
+      text-decoration: none;
+    }
+
+    span {
+      color: var(--muted-color);
+      font-size: 13px;
+    }
+  }
+}
+
+// ---- one letter ----
+
+.TimeCapsulePage .TimeCapsuleLetterWrap {
+  position: relative;
+}
+
+.TimeCapsulePage .TimeCapsuleLetter {
+  max-width: 720px;
+  margin: 0 auto 24px;
+  padding: 36px 40px 28px;
+  border: 1px solid var(--control-bg);
+  border-radius: var(--border-radius);
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 27px, @tc-line 27px 28px) 0 120px / 100% calc(100% - 160px) no-repeat,
+    var(--body-bg);
+  box-shadow: 0 10px 30px var(--shadow-color);
+  color: var(--text-color);
+
+  &--compact {
+    padding: 24px 26px 18px;
+    box-shadow: none;
+  }
+
+  &--sealed {
+    text-align: center;
+    color: var(--muted-color);
+    box-shadow: none;
+
+    > .icon {
+      font-size: 28px;
+    }
+  }
+
+  .TimeCapsuleLetter-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .TimeCapsuleLetter-meta {
+    min-width: 0;
+  }
+
+  .TimeCapsuleLetter-from {
+    font-weight: 700;
+    font-size: 15px;
+
+    a {
+      color: var(--text-color);
+    }
+  }
+
+  .TimeCapsuleLetter-dates {
+    color: var(--muted-color);
+    font-size: 13px;
+  }
+
+  .TimeCapsuleLetter-peek {
+    padding: 10px 12px;
+    border-radius: var(--border-radius);
+    background: @tc-paper;
+    color: var(--text-color);
+    font-size: 13px;
+  }
+
+  .TimeCapsuleLetter-title {
+    margin: 0 0 14px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--heading-color);
+    overflow-wrap: anywhere;
+  }
+
+  .TimeCapsuleLetter-body {
+    font-size: 16px;
+    line-height: 28px;
+    overflow-wrap: anywhere;
+
+    p {
+      margin: 0 0 28px;
+      white-space: pre-line;
+    }
+  }
+
+  .TimeCapsuleLetter-unreadable {
+    color: var(--muted-color);
+    font-style: italic;
+  }
+
+  .TimeCapsuleLetter-photos {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+    grid-template-columns: repeat(2, 1fr);
+
+    &--1 {
+      grid-template-columns: 1fr;
+    }
+
+    &--3 .TimeCapsuleLetter-photo:first-child {
+      grid-column: ~"1 / -1";
+    }
+  }
+
+  .TimeCapsuleLetter-photo {
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--control-bg);
+    cursor: zoom-in;
+
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-height: 460px;
+      object-fit: cover;
+    }
+  }
+
+  .TimeCapsuleLetter-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+
+    .Button {
+      color: var(--control-color);
+    }
+  }
+
+  .TimeCapsuleLetter-delete {
+    margin-left: auto;
+    color: var(--muted-color);
+  }
+}
+
+.TimeCapsulePage .TimeCapsuleLetters {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .TimeCapsuleLetter {
+    margin-bottom: 0;
+  }
+
+  .TimeCapsuleLetters-more {
+    align-self: center;
+  }
+}
+
+.TimeCapsuleLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: var(--zindex-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.88);
+  cursor: zoom-out;
+
+  img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 4px;
+  }
+
+  .TimeCapsuleLightbox-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+// The first read: the flap lifts, the seal breaks, the letter rises out.
+.TimeCapsuleUnseal {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  width: 260px;
+  height: 170px;
+  margin-left: -130px;
+  z-index: 2;
+  perspective: 600px;
+  animation: tc-fade-out 0.5s ease 1.4s forwards;
+  pointer-events: none;
+
+  .TimeCapsuleUnseal-back {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    background: @tc-paper-deep;
+    box-shadow: 0 12px 30px var(--shadow-color);
+  }
+
+  .TimeCapsuleUnseal-flap {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 110px;
+    background: @tc-paper;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+    transform-origin: top;
+    animation: tc-flap-open 0.6s ease 0.45s forwards;
+  }
+
+  .TimeCapsuleUnseal-seal {
+    position: absolute;
+    left: 50%;
+    top: 92px;
+    margin-left: -22px;
+    animation: tc-seal-break 0.45s ease forwards;
+  }
+}
+
+.TimeCapsuleLetterWrap.is-unsealing > .TimeCapsuleLetter {
+  animation: tc-letter-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.9s both;
+}
+
+@keyframes tc-seal-break {
+  40% {
+    transform: scale(1.15) rotate(-8deg);
+  }
+  100% {
+    transform: scale(0.4) rotate(30deg);
+    opacity: 0;
+  }
+}
+
+@keyframes tc-flap-open {
+  to {
+    transform: rotateX(180deg);
+    opacity: 0.6;
+  }
+}
+
+@keyframes tc-letter-rise {
+  from {
+    transform: translateY(60px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes tc-fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+// ---- the letter form ----
+
+.TimeCapsuleSealModal,
+.TimeCapsuleCommunityModal {
+  color: var(--text-color);
+
+  legend {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+
+  .Checkbox {
+    margin-top: 8px;
+  }
+}
+
+.TimeCapsuleSealModal {
+  .TimeCapsuleSeal-body {
+    min-height: 200px;
+    font-size: 15px;
+    line-height: 1.6;
+    resize: vertical;
+  }
+
+  .TimeCapsuleSeal-where {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+
+  .TimeCapsuleSeal-date {
+    margin-top: 10px;
+    max-width: 220px;
+  }
+
+  .TimeCapsuleSeal-summary {
+    margin: -6px 0 18px;
+    padding: 10px 12px;
+    border-radius: var(--border-radius);
+    background: @tc-paper;
+    color: var(--text-color);
+    font-weight: 600;
+  }
+
+  .TimeCapsuleSeal-communityNote {
+    margin-bottom: 18px;
+  }
+
+  .TimeCapsuleSeal-submit .helpText {
+    text-align: center;
+    margin-top: 8px;
+  }
+}
+
+.TimeCapsuleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.TimeCapsuleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 14px;
+  border: 1px solid var(--control-bg);
+  border-radius: 999px;
+  background: var(--body-bg);
+  color: var(--control-color);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    background: var(--control-bg);
+  }
+
+  &.is-active {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    color: var(--body-bg);
+  }
+}
+
+.TimeCapsulePhotos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 2px dashed var(--control-bg);
+  border-radius: var(--border-radius);
+
+  &.is-dragging {
+    border-color: var(--primary-color);
+  }
+
+  .TimeCapsulePhotos-item,
+  .TimeCapsulePhotos-add {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .TimeCapsulePhotos-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .TimeCapsulePhotos-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+  }
+
+  .TimeCapsulePhotos-add {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: var(--control-bg);
+    color: var(--control-color);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+
+    .icon {
+      font-size: 18px;
+    }
+
+    input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+  }
+}
+
+// Sealing: the letter slides in, the flap folds down, the seal stamps.
+.TimeCapsuleSealing {
+  text-align: center;
+  padding: 30px 20px 36px;
+
+  .TimeCapsuleSealing-envelope {
+    position: relative;
+    width: 240px;
+    height: 150px;
+    margin: 40px auto 24px;
+    perspective: 600px;
+  }
+
+  .TimeCapsuleSealing-back {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    background: @tc-paper-deep;
+    box-shadow: 0 10px 26px var(--shadow-color);
+  }
+
+  .TimeCapsuleSealing-letter {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    top: -60px;
+    height: 120px;
+    border-radius: 4px;
+    background: repeating-linear-gradient(to bottom, var(--body-bg) 0 14px, @tc-line 14px 15px);
+    border: 1px solid var(--control-bg);
+    z-index: 1;
+    animation: tc-letter-in 0.7s ease forwards;
+  }
+
+  .TimeCapsuleSealing-back {
+    z-index: 2;
+    clip-path: polygon(0 30%, 50% 75%, 100% 30%, 100% 100%, 0 100%);
+  }
+
+  .TimeCapsuleSealing-flap {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 100px;
+    z-index: 3;
+    background: @tc-paper;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+    transform-origin: top;
+    transform: rotateX(180deg);
+    animation: tc-flap-close 0.5s ease 0.6s forwards;
+  }
+
+  .TimeCapsuleSealing-seal {
+    position: absolute;
+    left: 50%;
+    top: 78px;
+    margin-left: -22px;
+    z-index: 4;
+    opacity: 0;
+    transform: scale(2.2);
+  }
+
+  .is-sealed .TimeCapsuleSealing-seal {
+    animation: tc-stamp 0.4s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
+  }
+
+  .TimeCapsuleSealing-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+}
+
+@keyframes tc-letter-in {
+  to {
+    top: 20px;
+  }
+}
+
+@keyframes tc-flap-close {
+  to {
+    transform: rotateX(0deg);
+  }
+}
+
+@keyframes tc-stamp {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+// ---- phones ----
+
+@media @phone {
+  .TimeCapsulePage .TimeCapsuleHero {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 20px 18px;
+
+    .TimeCapsuleHero-title {
+      font-size: 22px;
+    }
+
+    .TimeCapsuleHero-write {
+      width: 100%;
+    }
+  }
+
+  .TimeCapsulePage .TimeCapsuleCommunity {
+    padding: 22px 14px 18px;
+  }
+
+  .TimeCapsuleCountdown {
+    gap: 6px;
+
+    .TimeCapsuleCountdown-part {
+      min-width: 0;
+      flex: 1;
+      padding: 8px 2px 6px;
+    }
+
+    .TimeCapsuleCountdown-value {
+      font-size: 22px;
+    }
+
+    .TimeCapsuleCountdown-unit {
+      font-size: 10px;
+    }
+  }
+
+  .TimeCapsulePage .TimeCapsuleLetter {
+    padding: 22px 18px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .TimeCapsulePage .TimeCapsuleCard {
+    transition: none;
+
+    &:hover {
+      transform: none;
+    }
+  }
+
+  .TimeCapsuleUnseal,
+  .TimeCapsuleSealing * {
+    animation-duration: 0.01s !important;
+    animation-delay: 0s !important;
+  }
+}

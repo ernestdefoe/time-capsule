@@ -1,0 +1,86 @@
+{
+    "name": "ernestdefoe/time-capsule",
+    "description": "Time Capsule: members write letters to the future, with photos, sealed and encrypted until the day they open. Personal capsules, a forum-wide community capsule, countdowns, and an optional discussion when one opens.",
+    "keywords": [
+        "flarum",
+        "flarum-extension",
+        "time capsule",
+        "letters",
+        "future",
+        "community"
+    ],
+    "type": "flarum-extension",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ernest Defoe",
+            "email": "ernestdefoe@gmail.com"
+        }
+    ],
+    "homepage": "https://github.com/ernestdefoe/time-capsule",
+    "support": {
+        "issues": "https://github.com/ernestdefoe/time-capsule/issues",
+        "source": "https://github.com/ernestdefoe/time-capsule"
+    },
+    "funding": [
+        {
+            "type": "other",
+            "url": "https://buymeacoffee.com/ernestdefoe"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "ext-sodium": "*",
+        "flarum/core": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ErnestDefoe\\TimeCapsule\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ErnestDefoe\\TimeCapsule\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "flarum-extension": {
+            "title": "Time Capsule",
+            "category": "feature",
+            "icon": {
+                "name": "fas fa-hourglass-half",
+                "backgroundColor": "#7c2d12",
+                "color": "#fff"
+            },
+            "optional-dependencies": [
+                "flarum/gdpr",
+                "flarum/tags"
+            ]
+        }
+    },
+    "require-dev": {
+        "flarum/gdpr": "^2.0",
+        "flarum/phpstan": "^2.0",
+        "flarum/tags": "^2.0",
+        "flarum/testing": "^2.0"
+    },
+    "scripts": {
+        "test": [
+            "@test:integration"
+        ],
+        "test:integration": "phpunit -c tests/phpunit.integration.xml",
+        "test:setup": "@php tests/integration/setup.php",
+        "analyse:phpstan": "phpstan analyse"
+    },
+    "scripts-descriptions": {
+        "test": "Runs all tests.",
+        "test:integration": "Runs all integration tests.",
+        "test:setup": "Sets up a database for use with integration tests. Execute this only once.",
+        "analyse:phpstan": "Run static analysis"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "beta",
+    "prefer-stable": true
+}
