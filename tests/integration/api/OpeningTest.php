@@ -18,7 +18,7 @@ class OpeningTest extends TestCase
 {
     use RetrievesAuthorizedUsers;
 
-    private const SECRET = 'OTTER-2291-not-yet';
+    private const MARKER = 'OTTER-2291-not-yet';
 
     protected function setUp(): void
     {
@@ -45,7 +45,7 @@ class OpeningTest extends TestCase
     private function seal(array $fields = [], int $as = 2): int
     {
         [$status, $body] = $this->json('POST', '/api/time-capsule', $as, $fields + [
-            'body' => 'Note to self: '.self::SECRET,
+            'body' => 'Note to self: '.self::MARKER,
             'opensAt' => Carbon::now()->addDays(3)->toIso8601String(),
             'visibility' => 'private',
         ]);
@@ -92,7 +92,7 @@ class OpeningTest extends TestCase
 
         // The alert carries no words of the letter.
         [, $alerts] = $this->json('GET', '/api/notifications', 2);
-        $this->assertStringNotContainsString(self::SECRET, json_encode($alerts));
+        $this->assertStringNotContainsString(self::MARKER, json_encode($alerts));
     }
 
     #[Test]
@@ -122,7 +122,7 @@ class OpeningTest extends TestCase
         $discussion = $this->database()->table('discussions')->first();
         $this->assertSame('For the future', $discussion->title);
         $this->assertSame(2, (int) $discussion->user_id);
-        $this->assertStringContainsString(self::SECRET, (string) $this->database()->table('posts')->where('discussion_id', $discussion->id)->value('content'));
+        $this->assertStringContainsString(self::MARKER, (string) $this->database()->table('posts')->where('discussion_id', $discussion->id)->value('content'));
         $this->assertSame((int) $discussion->id, (int) $this->database()->table('time_capsules')->where('id', $id)->value('discussion_id'));
     }
 
@@ -158,10 +158,10 @@ class OpeningTest extends TestCase
         foreach ([null, 1, 2, 3, 4] as $as) {
             [$status, $body] = $this->json('GET', '/api/time-capsule/community/'.$community, $as);
             $this->assertSame(200, $status);
-            $this->assertStringNotContainsString(self::SECRET, json_encode($body));
+            $this->assertStringNotContainsString(self::MARKER, json_encode($body));
             $this->assertSame(2, $body['community']['letters']);
             [, $page] = $this->json('GET', '/api/time-capsule', $as);
-            $this->assertStringNotContainsString(self::SECRET, json_encode($page));
+            $this->assertStringNotContainsString(self::MARKER, json_encode($page));
         }
         $this->assertSame(404, $this->json('GET', '/api/time-capsule/'.$first, 3)[0]);
 
@@ -171,7 +171,7 @@ class OpeningTest extends TestCase
 
         [, $body] = $this->json('GET', '/api/time-capsule/community/'.$community, 4);
         $this->assertCount(2, $body['letters']);
-        $this->assertStringContainsString(self::SECRET, $body['letters'][0]['body']);
+        $this->assertStringContainsString(self::MARKER, $body['letters'][0]['body']);
         $this->assertSame(200, $this->json('GET', '/api/time-capsule/'.$first, null)[0]);
 
         // The writers, once each; not the member who wrote nothing.

@@ -18,7 +18,7 @@ class SealingTest extends TestCase
 {
     use RetrievesAuthorizedUsers;
 
-    private const SECRET = 'ZEBRA-7731-quietly-hidden';
+    private const MARKER = 'ZEBRA-7731-quietly-hidden';
 
     protected function setUp(): void
     {
@@ -50,7 +50,7 @@ class SealingTest extends TestCase
     private function seal(array $fields = [], ?int $as = 2, array $files = []): array
     {
         return $this->send_('POST', '/api/time-capsule', $as, $fields + [
-            'body' => 'Dear future me, '.self::SECRET.'. Hello from the past.',
+            'body' => 'Dear future me, '.self::MARKER.'. Hello from the past.',
             'envelope' => 'For later',
             'opensAt' => Carbon::now()->addYears(5)->toIso8601String(),
             'visibility' => 'public',
@@ -68,7 +68,7 @@ class SealingTest extends TestCase
     }
 
     /** Every place a letter or its writer could surface, as each kind of viewer. */
-    private function assertNowhere(int $id, string $secret = self::SECRET): void
+    private function assertNowhere(int $id, string $marker = self::MARKER): void
     {
         $paths = [
             '/api/time-capsule',
@@ -83,7 +83,7 @@ class SealingTest extends TestCase
         foreach ([null, 1, 2, 3] as $as) {
             foreach ($paths as $path) {
                 [, , $raw] = $this->send_('GET', $path, $as);
-                $this->assertStringNotContainsString($secret, $raw, "$path as ".($as ?? 'guest'));
+                $this->assertStringNotContainsString($marker, $raw, "$path as ".($as ?? 'guest'));
                 $this->assertStringNotContainsString('tc1:', $raw, "ciphertext in $path");
             }
         }
@@ -97,12 +97,12 @@ class SealingTest extends TestCase
         $this->assertSame(201, $status, $raw);
         $this->assertTrue($body['capsule']['sealed']);
         $this->assertArrayNotHasKey('body', $body['capsule']);
-        $this->assertStringNotContainsString(self::SECRET, $raw);
+        $this->assertStringNotContainsString(self::MARKER, $raw);
 
         $row = $this->database()->table('time_capsules')->first();
         $this->assertStringStartsWith('tc1:', $row->sealed_body);
-        $this->assertStringNotContainsString(self::SECRET, $row->sealed_body);
-        $this->assertStringNotContainsString(self::SECRET, base64_decode(substr($row->sealed_body, 4)));
+        $this->assertStringNotContainsString(self::MARKER, $row->sealed_body);
+        $this->assertStringNotContainsString(self::MARKER, base64_decode(substr($row->sealed_body, 4)));
         $this->assertSame(8, (int) $row->words);
     }
 
@@ -133,13 +133,13 @@ class SealingTest extends TestCase
 
         [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$id, 2);
         $this->assertSame(200, $status);
-        $this->assertStringContainsString(self::SECRET, $show['capsule']['body']);
+        $this->assertStringContainsString(self::MARKER, $show['capsule']['body']);
         $this->assertFalse($show['capsule']['firstRead']);
 
         foreach ([null, 1, 3] as $as) {
             $this->assertSame(404, $this->send_('GET', '/api/time-capsule/'.$id, $as)[0]);
             [, , $raw] = $this->send_('GET', '/api/time-capsule', $as);
-            $this->assertStringNotContainsString(self::SECRET, $raw);
+            $this->assertStringNotContainsString(self::MARKER, $raw);
         }
     }
 
@@ -173,12 +173,12 @@ class SealingTest extends TestCase
         // The writer's page opens it (no scheduler run yet).
         [, $page] = $this->send_('GET', '/api/time-capsule', 2);
         $this->assertFalse($page['mine'][0]['sealed']);
-        $this->assertStringContainsString(self::SECRET, $page['mine'][0]['body']);
+        $this->assertStringContainsString(self::MARKER, $page['mine'][0]['body']);
 
         foreach ([null, 1, 3] as $as) {
             $this->assertSame(404, $this->send_('GET', '/api/time-capsule/'.$id, $as)[0]);
             [, , $raw] = $this->send_('GET', '/api/time-capsule', $as);
-            $this->assertStringNotContainsString(self::SECRET, $raw);
+            $this->assertStringNotContainsString(self::MARKER, $raw);
         }
     }
 
@@ -193,7 +193,7 @@ class SealingTest extends TestCase
         foreach ([null, 3] as $as) {
             [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$id, $as);
             $this->assertSame(200, $status);
-            $this->assertStringContainsString(self::SECRET, $show['capsule']['body']);
+            $this->assertStringContainsString(self::MARKER, $show['capsule']['body']);
             $this->assertCount(1, $show['capsule']['photos']);
             [, $page] = $this->send_('GET', '/api/time-capsule', $as);
             $this->assertSame($id, $page['recent'][0]['id']);
@@ -233,6 +233,20 @@ class SealingTest extends TestCase
         $this->assertSame(422, $this->seal([], 2, array_fill(0, 5, $this->photo()))[0]);
         $this->assertSame(201, $this->seal(['opensAt' => Carbon::now()->addYears(25)->toIso8601String()])[0]);
         $this->assertSame(0, $this->database()->table('time_capsule_photos')->count());
+    }
+
+    #[Test]
+    public function an_image_too_big_to_decode_is_refused_before_decoding()
+    {
+        // A valid PNG header declaring 20000 x 20000 pixels, a few bytes long.
+        $png = "\x89PNG\r\n\x1a\n".pack('N', 13).'IHDR'.pack('NN', 20000, 20000)."\x08\x02\x00\x00\x00";
+        $png .= pack('N', crc32(substr($png, 12, 17)));
+        $path = tempnam(sys_get_temp_dir(), 'tc');
+        file_put_contents($path, $png);
+
+        [$status] = $this->seal([], 2, [new UploadedFile($path, filesize($path), UPLOAD_ERR_OK, 'bomb.png', 'image/png')]);
+        $this->assertSame(422, $status);
+        $this->assertSame(0, $this->database()->table('time_capsules')->count());
     }
 
     #[Test]

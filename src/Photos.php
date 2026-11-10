@@ -16,6 +16,8 @@ use Throwable;
 class Photos
 {
     private const MAX_SIDE = 1600;
+    /** Checked from the header before decoding: a small file can declare a huge image and exhaust memory. */
+    private const MAX_PIXELS = 50_000_000;
 
     public function __construct(private readonly Vault $vault, private readonly ImageManager $images)
     {
@@ -30,8 +32,14 @@ class Photos
             return null;
         }
 
+        $bytes = (string) $upload->getStream();
+        $size = @getimagesizefromstring($bytes);
+        if (! $size || $size[0] < 1 || $size[1] < 1 || $size[0] * $size[1] > self::MAX_PIXELS) {
+            return null;
+        }
+
         try {
-            $image = $this->images->read((string) $upload->getStream());
+            $image = $this->images->read($bytes);
             if ($image->isAnimated()) {
                 $image->removeAnimation();
             }
