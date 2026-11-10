@@ -120,6 +120,7 @@ ernestdefoe-time-capsule:
       field_description: What should members write about?
       field_date: Opens on
       field_date_help: "Every letter in it opens at the start of this day (midnight in your time zone)."
+      field_date_later: "Members have written letters for this day, so it can only move later."
       field_notify: Notify every member when it opens (otherwise only the writers)
       field_post: Start a discussion when it opens
       create: Start it
@@ -183,6 +184,7 @@ ernestdefoe-time-capsule:
       time_capsule_too_many: "You have as many sealed letters as the forum allows. Wait for one to open, or delete one."
       time_capsule_community_exists: There's already a community capsule waiting to open.
       time_capsule_bad_community: "Give it a name of at least 3 characters and a day in the future."
+      time_capsule_community_earlier: "Members have already written letters for that day, so it can only move later, not earlier."
 
   lib:
     discussion:

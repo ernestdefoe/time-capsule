@@ -99,6 +99,10 @@ class CommunityController implements RequestHandlerInterface
         if (mb_strlen($title) < 3 || mb_strlen($title) > 100 || mb_strlen($description) > 2000 || ! $opensAt) {
             return Errors::make(422, 'time_capsule_bad_community');
         }
+        // Members wrote their letters for that day: once there are any, the day can only move later.
+        if ($id && $opensAt < $community->opens_at && Capsule::query()->where('community_id', $community->id)->exists()) {
+            return Errors::make(422, 'time_capsule_community_earlier');
+        }
 
         if (! $id) {
             $community->user_id = $actor->id;

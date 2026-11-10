@@ -182,6 +182,25 @@ class OpeningTest extends TestCase
     }
 
     #[Test]
+    public function a_community_capsule_with_letters_can_only_move_later()
+    {
+        $opens = Carbon::now()->addDays(30);
+        [, $created] = $this->json('POST', '/api/time-capsule/community', 1, ['title' => 'Next year', 'opensAt' => $opens->toIso8601String()]);
+        $id = $created['community']['id'];
+
+        // No letters yet: any day.
+        $this->assertSame(200, $this->json('PATCH', '/api/time-capsule/community/'.$id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(20)->toIso8601String()])[0]);
+
+        $letter = $this->seal(['community' => $id]);
+        $this->assertSame(422, $this->json('PATCH', '/api/time-capsule/community/'.$id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(2)->toIso8601String()])[0]);
+        $this->assertSame(200, $this->json('PATCH', '/api/time-capsule/community/'.$id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
+
+        $this->opener()->run();
+        $this->assertNull($this->database()->table('time_capsules')->where('id', $letter)->value('opened_at'));
+        $this->assertGreaterThan(Carbon::now()->addDays(39), Carbon::parse($this->database()->table('time_capsules')->where('id', $letter)->value('opens_at')));
+    }
+
+    #[Test]
     public function a_community_capsule_can_notify_everyone_once()
     {
         [, $created] = $this->json('POST', '/api/time-capsule/community', 1, [

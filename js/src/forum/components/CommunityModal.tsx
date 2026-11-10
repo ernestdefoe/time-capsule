@@ -32,6 +32,13 @@ export default class CommunityModal extends FormModal<Attrs> {
     this.notifyEveryone = c ? c.notifyEveryone : true;
   }
 
+  /** Tomorrow; or, once members have written letters, the day already set (it can only move later). */
+  earliest(): Date {
+    const tomorrow = new Date(Date.now() + 864e5);
+    const c = this.attrs.community;
+    return c && c.letters > 0 && new Date(c.opensAt) > tomorrow ? new Date(c.opensAt) : tomorrow;
+  }
+
   className() {
     return 'TimeCapsuleCommunityModal Modal--medium';
   }
@@ -74,12 +81,13 @@ export default class CommunityModal extends FormModal<Attrs> {
             id="TimeCapsuleCommunity-date"
             type="date"
             className="FormControl"
-            min={dateInput(new Date(Date.now() + 864e5))}
+            min={dateInput(this.earliest())}
             max={dateInput(max)}
             value={this.date}
             oninput={(e: InputEvent) => (this.date = (e.target as HTMLInputElement).value)}
           />
           <p className="helpText">{t('community.field_date_help')}</p>
+          {this.attrs.community?.letters ? <p className="helpText">{t('community.field_date_later')}</p> : null}
         </div>
         <div className="Form-group">
           <Switch state={this.notifyEveryone} onchange={(v: boolean) => (this.notifyEveryone = v)}>
