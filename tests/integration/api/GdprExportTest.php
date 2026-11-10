@@ -40,7 +40,8 @@ class GdprExportTest extends TestCase
     {
         $vault = $this->app()->getContainer()->make(Vault::class);
         $now = Carbon::now();
-        $row = fn (array $o) => $o + ['user_id' => 2, 'sealed_body' => $vault->seal('Dear me, '.self::MARKER, 'capsule:2'), 'sealed_at' => $now->copy()->subYear(), 'visibility' => 'private', 'words' => 3];
+        // Every row with the same columns: PostgreSQL won't take a multi-row insert that differs.
+        $row = fn (array $o) => $o + ['user_id' => 2, 'sealed_body' => $vault->seal('Dear me, '.self::MARKER, 'capsule:2'), 'sealed_at' => $now->copy()->subYear(), 'visibility' => 'private', 'words' => 3, 'author_can_read' => false, 'opened_at' => null];
         $this->database()->table('time_capsules')->insert([
             $row(['opens_at' => $now->copy()->addYear(), 'author_can_read' => true]),
             $row(['opens_at' => $now->copy()->subDay(), 'opened_at' => $now->copy()->subDay()]),
