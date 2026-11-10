@@ -79,7 +79,10 @@ export default class SealModal extends FormModal<Attrs> {
   }
 
   className() {
-    return 'TimeCapsuleSealModal Modal--large' + (this.sealing || this.sealed ? ' is-sealing' : '');
+    // 🚨 Constant: ModalManager adds `in` to this element by hand, and a changed class list makes
+    // Mithril rewrite the attribute, dropping `in`. The dialog then fades early and its close
+    // waits for a transitionend that never comes, leaving the backdrop over the page.
+    return 'TimeCapsuleSealModal Modal--large';
   }
 
   title() {
