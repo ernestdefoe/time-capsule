@@ -236,6 +236,28 @@ class SealingTest extends TestCase
     }
 
     #[Test]
+    public function a_lost_key_is_never_silently_replaced()
+    {
+        [, $body] = $this->seal(['opensAt' => Carbon::now()->addDays(2)->toIso8601String()]);
+        $this->database()->table('time_capsules')->update(['opens_at' => Carbon::now()->subMinute()]);
+        $key = $this->app()->getContainer()->make(\Flarum\Foundation\Paths::class)->storage.'/time-capsule/key';
+        $this->assertFileExists($key);
+        unlink($key);
+
+        [$status, $error] = $this->seal();
+        $this->assertSame(503, $status);
+        $this->assertSame('time_capsule_key_missing', $error['errors'][0]['code']);
+        $this->assertFileDoesNotExist($key);
+        $this->assertSame(1, $this->database()->table('time_capsules')->count());
+
+        // Reading still works: the letter shows as unreadable, nothing 500s.
+        [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$body['capsule']['id'], 2);
+        $this->assertSame(200, $status);
+        $this->assertFalse($show['capsule']['readable']);
+        $this->assertSame(200, $this->send_('GET', '/api/time-capsule', 2)[0]);
+    }
+
+    #[Test]
     public function an_image_too_big_to_decode_is_refused_before_decoding()
     {
         // A valid PNG header declaring 20000 x 20000 pixels, a few bytes long.

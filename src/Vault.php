@@ -4,6 +4,8 @@ namespace ErnestDefoe\TimeCapsule;
 
 use Flarum\Foundation\Config;
 use Flarum\Foundation\Paths;
+use Illuminate\Database\ConnectionInterface;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
@@ -15,6 +17,12 @@ use RuntimeException;
  * base64]`) when set there, else from storage/time-capsule/key, written once
  * with random bytes the first time a letter is sealed. 🚨 Lose that file and
  * every sealed letter is lost with it: the admin page says to back it up.
+ *
+ * A key is only ever created while there are no letters. With letters in the
+ * database and no key, the key was lost (a restore without storage/, a new
+ * server): a fresh key would read none of them and quietly seal new ones
+ * under it, so sealing stops (KeyMissing) and the log says why, loudly.
+ * Reading never throws: a letter it can't decrypt shows as unreadable.
  */
 class Vault
 {
@@ -22,8 +30,12 @@ class Vault
 
     private ?string $key = null;
 
-    public function __construct(private readonly Paths $paths, private readonly Config $config)
-    {
+    public function __construct(
+        private readonly Paths $paths,
+        private readonly Config $config,
+        private readonly ConnectionInterface $db,
+        private readonly LoggerInterface $log,
+    ) {
     }
 
     public function seal(string $plain, string $context): string
@@ -55,7 +67,12 @@ class Vault
         if (strlen($raw) <= $size) {
             return null;
         }
-        $plain = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(substr($raw, $size), $context, substr($raw, 0, $size), $this->key());
+        try {
+            $key = $this->key();
+        } catch (KeyMissing) {
+            return null;
+        }
+        $plain = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(substr($raw, $size), $context, substr($raw, 0, $size), $key);
 
         return $plain === false ? null : $plain;
     }
@@ -93,16 +110,7 @@ class Vault
     {
         $file = $this->keyFile();
         if (! is_file($file)) {
-            if (! is_dir($this->directory())) {
-                @mkdir($this->directory(), 0770, true);
-            }
-            // 'x' fails if another process wrote the key first: then we read theirs.
-            $handle = @fopen($file, 'x');
-            if ($handle !== false) {
-                fwrite($handle, base64_encode(sodium_crypto_aead_xchacha20poly1305_ietf_keygen()));
-                fclose($handle);
-                @chmod($file, 0600);
-            }
+            $this->createKey($file);
         }
 
         $key = base64_decode(trim((string) @file_get_contents($file)), true);
@@ -111,5 +119,26 @@ class Vault
         }
 
         return $key;
+    }
+
+    private function createKey(string $file): void
+    {
+        if ($this->db->table('time_capsules')->exists()) {
+            $this->log->critical('[time-capsule] The key at '.$file.' is missing, but there are sealed letters: they were sealed with that key and cannot be opened without it. Restore storage/time-capsule/key from a backup. Sealing new letters is stopped until then.');
+
+            throw new KeyMissing('Time Capsule\'s key is missing: restore storage/time-capsule/key from a backup.');
+        }
+
+        if (! is_dir($this->directory())) {
+            @mkdir($this->directory(), 0770, true);
+        }
+
+        // Written whole to a temporary file, then linked into place: link() fails if another
+        // process got there first (then we read theirs), and nobody ever reads a half-written key.
+        $tmp = $file.'.'.bin2hex(random_bytes(6)).'.tmp';
+        file_put_contents($tmp, base64_encode(sodium_crypto_aead_xchacha20poly1305_ietf_keygen()));
+        @chmod($tmp, 0600);
+        @link($tmp, $file);
+        @unlink($tmp);
     }
 }

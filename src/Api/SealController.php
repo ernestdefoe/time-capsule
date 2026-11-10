@@ -5,6 +5,7 @@ namespace ErnestDefoe\TimeCapsule\Api;
 use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
+use ErnestDefoe\TimeCapsule\KeyMissing;
 use ErnestDefoe\TimeCapsule\Photo;
 use ErnestDefoe\TimeCapsule\Photos;
 use ErnestDefoe\TimeCapsule\Present;
@@ -83,6 +84,12 @@ class SealController implements RequestHandlerInterface
             return Errors::make(422, 'time_capsule_too_many');
         }
 
+        try {
+            $sealed = $this->vault->seal($text, 'capsule:'.$actor->id);
+        } catch (KeyMissing) {
+            return Errors::make(503, 'time_capsule_key_missing');
+        }
+
         $stored = [];
         foreach ($uploads as $upload) {
             $photo = $this->photos->store($upload, $actor->id);
@@ -100,7 +107,7 @@ class SealController implements RequestHandlerInterface
         $capsule->user_id = $actor->id;
         $capsule->community_id = $community?->id;
         $capsule->envelope = $envelope !== '' ? $envelope : null;
-        $capsule->sealed_body = $this->vault->seal($text, 'capsule:'.$actor->id);
+        $capsule->sealed_body = $sealed;
         $capsule->words = Input::words($text);
         $capsule->photo_count = count($stored);
         $capsule->opens_at = $opensAt;

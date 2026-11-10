@@ -184,6 +184,7 @@ ernestdefoe-time-capsule:
       time_capsule_too_many: "You have as many sealed letters as the forum allows. Wait for one to open, or delete one."
       time_capsule_community_exists: There's already a community capsule waiting to open.
       time_capsule_bad_community: "Give it a name of at least 3 characters and a day in the future."
+      time_capsule_key_missing: "Letters can't be sealed right now: the forum's time capsule key is missing. Please let an admin know."
       time_capsule_community_earlier: "Members have already written letters for that day, so it can only move later, not earlier."
 
   lib:
