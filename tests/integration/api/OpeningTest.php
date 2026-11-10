@@ -127,6 +127,46 @@ class OpeningTest extends TestCase
     }
 
     #[Test]
+    public function one_letter_that_fails_does_not_stop_the_others_or_the_community()
+    {
+        // Notifying this one letter's writer throws (after Flarum has stored the alert).
+        $this->extend((new \Flarum\Extend\Event())->listen(\Flarum\Notification\Event\Sent::class, function ($event) {
+            if (($event->blueprint->capsule->envelope ?? null) === 'BOOM') {
+                throw new \RuntimeException('mail server on fire');
+            }
+        }));
+
+        [, $created] = $this->json('POST', '/api/time-capsule/community', 1, ['title' => 'All of us', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String(), 'notifyEveryone' => false]);
+        $this->seal(['community' => $created['community']['id']], 3);
+        $bad = $this->seal(['envelope' => 'BOOM']);
+        $good = $this->seal(['envelope' => 'fine']);
+        $this->database()->table('time_capsules')->whereIn('id', [$bad, $good])->update(['opens_at' => Carbon::now()->subMinute()]);
+        $this->database()->table('time_capsule_communities')->update(['opens_at' => Carbon::now()->subMinute()]);
+
+        $this->opener()->run();
+
+        $this->assertNotNull($this->database()->table('time_capsules')->where('id', $bad)->value('opened_at'));
+        $this->assertNotNull($this->database()->table('time_capsules')->where('id', $good)->value('notified_at'));
+        $this->assertSame(1, $this->notifications('timeCapsuleCommunityOpened', 3));
+
+        // And the writer's page, which opens letters too, still loads.
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule', 2)[0]);
+    }
+
+    #[Test]
+    public function a_letter_that_cannot_be_posted_is_not_retried_and_one_that_throws_is()
+    {
+        $id = $this->seal(['visibility' => 'public', 'post' => true]);
+        $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute(), 'sealed_body' => 'tc1:damaged']);
+
+        $this->opener()->run();
+        $row = $this->database()->table('time_capsules')->where('id', $id)->first();
+        $this->assertNotNull($row->posted_at, 'an unreadable letter is marked done');
+        $this->assertSame(0, (int) $row->post_attempts);
+        $this->assertSame(0, $this->database()->table('discussions')->count());
+    }
+
+    #[Test]
     public function a_private_letter_never_starts_a_discussion()
     {
         $id = $this->seal(['visibility' => 'private', 'post' => true]);

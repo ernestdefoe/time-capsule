@@ -61,12 +61,16 @@ class Opener
         Capsule::query()->whereNull('opened_at')->whereNull('community_id')->where('opens_at', '<=', $now)
             ->orderBy('opens_at')->limit(self::BATCH)->get()
             ->each(function (Capsule $capsule) use (&$opened) {
-                $opened += (int) $this->open($capsule);
+                $this->guard('letter '.$capsule->id, function () use ($capsule, &$opened) {
+                    $opened += (int) $this->open($capsule);
+                });
             });
 
         Community::query()->whereNull('opened_at')->where('opens_at', '<=', $now)->get()
             ->each(function (Community $community) use (&$opened) {
-                $opened += (int) $this->openCommunity($community);
+                $this->guard('community capsule '.$community->id, function () use ($community, &$opened) {
+                    $opened += (int) $this->openCommunity($community);
+                });
             });
 
         $this->followUp();
@@ -86,7 +90,9 @@ class Opener
         $capsule->opened_at = $capsule->opened_at ?? Capsule::query()->whereKey($capsule->id)->value('opened_at');
         if ($won) {
             $capsule->opened_at = $now;
-            $this->notifyWriter($capsule);
+            // Page loads open letters too: a failed notification must not fail the page.
+            // notified_at stays empty and the scheduler's follow-up tries again.
+            $this->guard('letter '.$capsule->id, fn () => $this->notifyWriter($capsule));
         }
 
         return $won;
@@ -114,21 +120,31 @@ class Opener
     {
         Capsule::query()->whereNotNull('opened_at')->whereNull('community_id')->whereNull('notified_at')
             ->with('user')->limit(self::BATCH)->get()
-            ->each(fn (Capsule $capsule) => $this->notifyWriter($capsule));
+            ->each(fn (Capsule $capsule) => $this->guard('letter '.$capsule->id, fn () => $this->notifyWriter($capsule)));
 
         Capsule::query()->whereNotNull('opened_at')->whereNull('community_id')
             ->where('post_to_discussion', true)->where('visibility', Capsule::PUBLIC)
             ->whereNull('posted_at')->where('post_attempts', '<', self::MAX_POST_ATTEMPTS)
             ->with('user')->limit(20)->get()
-            ->each(fn (Capsule $capsule) => $this->postLetter($capsule));
+            ->each(fn (Capsule $capsule) => $this->guard('letter '.$capsule->id, fn () => $this->postLetter($capsule)));
 
         Community::query()->whereNotNull('opened_at')->whereNull('notified_at')->get()
-            ->each(fn (Community $community) => $this->notifyCommunity($community));
+            ->each(fn (Community $community) => $this->guard('community capsule '.$community->id, fn () => $this->notifyCommunity($community)));
 
         Community::query()->whereNotNull('opened_at')->where('post_to_discussion', true)
             ->whereNull('posted_at')->where('post_attempts', '<', self::MAX_POST_ATTEMPTS)
             ->with('user')->get()
-            ->each(fn (Community $community) => $this->postCommunity($community));
+            ->each(fn (Community $community) => $this->guard('community capsule '.$community->id, fn () => $this->postCommunity($community)));
+    }
+
+    /** One letter that throws must not stop the others, or a community's notifications, in the same run. */
+    private function guard(string $what, callable $step): void
+    {
+        try {
+            $step();
+        } catch (Throwable $e) {
+            $this->log->error('[time-capsule] '.$what.': '.$e->getMessage());
+        }
     }
 
     private function notifyWriter(Capsule $capsule): void
@@ -178,19 +194,17 @@ class Opener
 
     private function postLetter(Capsule $capsule): void
     {
-        if (! $this->claimPost(Capsule::class, $capsule->id)) {
-            return;
-        }
-
+        // Everything that can fail or say no runs BEFORE the claim, so a throw leaves the letter
+        // to be tried again, and a no is recorded as done.
         $author = $capsule->user;
         $tags = $author ? $this->tagsFor($author) : false;
-        if (! $author || $tags === false || ! $author->can('startDiscussion')) {
-            // Can't post as them any more (suspended, the tag closed): the letter stays on the capsule page.
-            return;
-        }
-
         $body = $this->vault->open($capsule->sealed_body, $capsule->context());
-        if ($body === null) {
+
+        if (! $author || $tags === false || ! $author->can('startDiscussion') || $body === null) {
+            // Can't post as them any more (suspended, the tag closed, unreadable): the letter
+            // stays on the capsule page, and nobody tries again.
+            Capsule::query()->whereKey($capsule->id)->whereNull('posted_at')->update(['posted_at' => Carbon::now()]);
+
             return;
         }
 
@@ -202,18 +216,18 @@ class Opener
             '['.$locale->trans($capsule->photo_count ? 'ernestdefoe-time-capsule.lib.discussion.link_photos' : 'ernestdefoe-time-capsule.lib.discussion.link').']('.$this->url->to('forum')->route('time-capsule.letter', ['id' => $capsule->id]).')',
         ]));
 
-        $this->post($capsule, $author, $title, $content, $tags);
+        if ($this->claimPost(Capsule::class, $capsule->id)) {
+            $this->post($capsule, $author, $title, $content, $tags);
+        }
     }
 
     private function postCommunity(Community $community): void
     {
-        if (! $this->claimPost(Community::class, $community->id)) {
-            return;
-        }
-
         $author = $community->user;
         $tags = $author ? $this->tagsFor($author) : false;
         if (! $author || $tags === false || ! $author->can('startDiscussion')) {
+            Community::query()->whereKey($community->id)->whereNull('posted_at')->update(['posted_at' => Carbon::now()]);
+
             return;
         }
 
@@ -226,7 +240,9 @@ class Opener
             '['.$this->translator->trans('ernestdefoe-time-capsule.lib.discussion.community_link').']('.$this->url->to('forum')->route('time-capsule.community', ['id' => $community->id]).')',
         ]));
 
-        $this->post($community, $author, $community->title, $content, $tags);
+        if ($this->claimPost(Community::class, $community->id)) {
+            $this->post($community, $author, $community->title, $content, $tags);
+        }
     }
 
     /** @param list<int>|null $tags */
