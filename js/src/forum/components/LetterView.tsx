@@ -43,7 +43,7 @@ export default class LetterView extends Component<Attrs> {
       window.setTimeout(() => {
         this.unsealing = false;
         m.redraw();
-      }, 1900);
+      }, 2200);
     }
   }
 
@@ -77,7 +77,7 @@ export default class LetterView extends Component<Attrs> {
         )}
         <article className={'TimeCapsuleLetter' + (this.attrs.compact ? ' TimeCapsuleLetter--compact' : '')}>
           <header className="TimeCapsuleLetter-head">
-            <Avatar person={letter.author} />
+            {Avatar({ person: letter.author })}
             <div className="TimeCapsuleLetter-meta">
               <div className="TimeCapsuleLetter-from">
                 {letter.mine ? t('letter.from_you') : t('letter.from', { name: personLink(letter.author) })}

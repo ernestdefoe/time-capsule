@@ -537,7 +537,8 @@
   color: var(--text-color);
 
   &--compact {
-    padding: 24px 26px 18px;
+    max-width: none;
+    padding: 24px 26px 20px;
     box-shadow: none;
   }
 
@@ -600,6 +601,10 @@
     p {
       margin: 0 0 28px;
       white-space: pre-line;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
     }
   }
 
@@ -641,11 +646,20 @@
     }
   }
 
+  .TimeCapsuleLetter-photos {
+    margin-top: 24px;
+  }
+
   .TimeCapsuleLetter-foot {
+    margin-top: 20px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
+
+    &:empty {
+      display: none;
+    }
 
     .Button {
       color: var(--control-color);
@@ -708,7 +722,7 @@
   margin-left: -130px;
   z-index: 2;
   perspective: 600px;
-  animation: tc-fade-out 0.5s ease 1.4s forwards;
+  animation: tc-fade-out 0.45s ease 1.3s forwards;
   pointer-events: none;
 
   .TimeCapsuleUnseal-back {
@@ -726,7 +740,7 @@
     background: @tc-paper;
     clip-path: polygon(0 0, 100% 0, 50% 100%);
     transform-origin: top;
-    animation: tc-flap-open 0.6s ease 0.45s forwards;
+    animation: tc-flap-open 0.5s ease 0.8s forwards;
   }
 
   .TimeCapsuleUnseal-seal {
@@ -734,12 +748,12 @@
     left: 50%;
     top: 92px;
     margin-left: -22px;
-    animation: tc-seal-break 0.45s ease forwards;
+    animation: tc-seal-break 0.45s ease 0.35s forwards;
   }
 }
 
 .TimeCapsuleLetterWrap.is-unsealing > .TimeCapsuleLetter {
-  animation: tc-letter-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.9s both;
+  animation: tc-letter-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 1.25s both;
 }
 
 @keyframes tc-seal-break {
@@ -794,6 +808,17 @@
 }
 
 .TimeCapsuleSealModal {
+  .Form-group,
+  fieldset {
+    margin: 0 0 22px;
+  }
+
+  .Form-group > label:not(.Checkbox),
+  legend {
+    display: block;
+    margin-bottom: 8px;
+  }
+
   .TimeCapsuleSeal-body {
     min-height: 200px;
     font-size: 15px;
@@ -871,8 +896,9 @@
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   gap: 8px;
   padding: 8px;
-  border: 2px dashed var(--control-bg);
+  border: 2px dashed color-mix(in srgb, var(--muted-color) 40%, transparent);
   border-radius: var(--border-radius);
+  background: var(--body-bg);
 
   &.is-dragging {
     border-color: var(--primary-color);
@@ -910,6 +936,7 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
+    margin: 0;
     background: var(--control-bg);
     color: var(--control-color);
     font-size: 12px;

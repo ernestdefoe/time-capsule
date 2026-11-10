@@ -157,13 +157,13 @@ export default class TimeCapsulePage extends Page {
             </h3>
             {sealed.length ? (
               <div className="TimeCapsuleGrid">
-                {sealed.map((letter) => (
-                  <SealedCard
-                    letter={letter}
-                    onread={() => m.route.set(app.route('time-capsule.letter', { id: letter.id }))}
-                    ondelete={() => this.remove(letter)}
-                  />
-                ))}
+                {sealed.map((letter) =>
+                  SealedCard({
+                    letter,
+                    onread: () => m.route.set(app.route('time-capsule.letter', { id: letter.id })),
+                    ondelete: () => this.remove(letter),
+                  })
+                )}
               </div>
             ) : (
               <div className="TimeCapsuleEmpty">
@@ -184,11 +184,7 @@ export default class TimeCapsulePage extends Page {
             <h3 className="TimeCapsuleSection-title">
               <Icon name="fas fa-envelope-open-text" /> {t('page.opened_mine_title')}
             </h3>
-            <div className="TimeCapsuleGrid">
-              {opened.map((letter) => (
-                <OpenedCard letter={letter} />
-              ))}
-            </div>
+            <div className="TimeCapsuleGrid">{opened.map((letter) => OpenedCard({ letter }))}</div>
           </section>
         )}
 
@@ -197,11 +193,7 @@ export default class TimeCapsulePage extends Page {
             <Icon name="fas fa-door-open" /> {t('page.recent_title')}
           </h3>
           {data.recent.length ? (
-            <div className="TimeCapsuleGrid">
-              {data.recent.map((letter) => (
-                <OpenedCard letter={letter} />
-              ))}
-            </div>
+            <div className="TimeCapsuleGrid">{data.recent.map((letter) => OpenedCard({ letter }))}</div>
           ) : (
             <p className="TimeCapsuleSection-empty">{t('page.recent_empty')}</p>
           )}
@@ -376,13 +368,13 @@ export default class TimeCapsulePage extends Page {
                 <Icon name="fas fa-envelope" /> {t('community.your_letters')}
               </h3>
               <div className="TimeCapsuleGrid">
-                {letters.map((letter) => (
-                  <SealedCard
-                    letter={letter}
-                    onread={() => m.route.set(app.route('time-capsule.letter', { id: letter.id }))}
-                    ondelete={() => this.remove(letter)}
-                  />
-                ))}
+                {letters.map((letter) =>
+                  SealedCard({
+                    letter,
+                    onread: () => m.route.set(app.route('time-capsule.letter', { id: letter.id })),
+                    ondelete: () => this.remove(letter),
+                  })
+                )}
               </div>
             </section>
           )

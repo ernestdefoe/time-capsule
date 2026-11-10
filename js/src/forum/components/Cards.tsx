@@ -120,7 +120,7 @@ export function OpenedCard({ letter }: { letter: Letter }): Mithril.Children {
   return (
     <article className={'TimeCapsuleCard TimeCapsuleCard--opened' + (letter.firstRead ? ' is-new' : '')}>
       <header className="TimeCapsuleCard-head">
-        <Avatar person={letter.author} size="small" />
+        {Avatar({ person: letter.author, size: 'small' })}
         <div>
           <div className="TimeCapsuleCard-who">{letter.mine ? t('card.you') : personLink(letter.author)}</div>
           <div className="TimeCapsuleCard-when">{t('card.waited', { date: longDate(letter.sealedAt), time: waited })}</div>
