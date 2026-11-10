@@ -76,6 +76,12 @@ class SealController implements RequestHandlerInterface
             return Errors::make(422, 'time_capsule_too_many_photos');
         }
 
+        foreach ($uploads as $upload) {
+            if (! $this->photos->fits($upload)) {
+                return Errors::make(422, 'time_capsule_bad_photo');
+            }
+        }
+
         $mine = Capsule::query()->where('user_id', $actor->id);
         if ($mine->clone()->where('sealed_at', '>', Carbon::now()->subDay())->count() >= Settings::MAX_PER_DAY) {
             return Errors::make(429, 'time_capsule_slow_down');

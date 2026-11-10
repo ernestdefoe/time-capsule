@@ -16,8 +16,14 @@ use Throwable;
 class Photos
 {
     private const MAX_SIDE = 1600;
-    /** Checked from the header before decoding: a small file can declare a huge image and exhaust memory. */
-    private const MAX_PIXELS = 50_000_000;
+    /**
+     * Checked from the header before decoding: a small file can declare a huge image, and GD
+     * running out of memory is a fatal error no catch stops. Browsers shrink photos to 2000 px
+     * before upload, so real ones are far below this.
+     */
+    private const MAX_PIXELS = 16_000_000;
+    /** GD holds about 4 bytes a pixel, the WebP encode and a scaled copy need more: leave room. */
+    private const BYTES_PER_PIXEL = 12;
 
     public function __construct(private readonly Vault $vault, private readonly ImageManager $images)
     {
@@ -33,8 +39,7 @@ class Photos
         }
 
         $bytes = (string) $upload->getStream();
-        $size = @getimagesizefromstring($bytes);
-        if (! $size || $size[0] < 1 || $size[1] < 1 || $size[0] * $size[1] > self::MAX_PIXELS) {
+        if (! $this->fits($upload)) {
             return null;
         }
 
@@ -57,6 +62,37 @@ class Photos
         file_put_contents($dir.'/'.$file, $this->vault->sealBytes($bytes, self::context($userId)));
 
         return ['file' => $file, 'width' => $image->width(), 'height' => $image->height()];
+    }
+
+    /**
+     * Whether an upload is an image this server can decode without running out of memory:
+     * asked of every photo before any is stored, so a refusal never leaves files behind.
+     */
+    public function fits(UploadedFileInterface $upload): bool
+    {
+        if ($upload->getError() !== UPLOAD_ERR_OK || $upload->getSize() > Settings::MAX_PHOTO_BYTES) {
+            return false;
+        }
+        $size = @getimagesizefromstring((string) $upload->getStream());
+        if (! $size || $size[0] < 1 || $size[1] < 1) {
+            return false;
+        }
+
+        return $size[0] * $size[1] <= min(self::MAX_PIXELS, self::memoryPixels());
+    }
+
+    /** How many pixels fit in the memory PHP has left. */
+    private static function memoryPixels(): int
+    {
+        $limit = trim((string) ini_get('memory_limit'));
+        if ($limit === '' || $limit === '-1') {
+            return PHP_INT_MAX;
+        }
+        $bytes = (int) $limit;
+        $unit = strtolower(substr($limit, -1));
+        $bytes *= match ($unit) { 'g' => 1024 ** 3, 'm' => 1024 ** 2, 'k' => 1024, default => 1 };
+
+        return max(0, intdiv($bytes - memory_get_usage(), self::BYTES_PER_PIXEL));
     }
 
     /** The decrypted WebP, or null. */

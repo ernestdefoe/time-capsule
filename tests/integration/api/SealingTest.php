@@ -272,6 +272,31 @@ class SealingTest extends TestCase
     }
 
     #[Test]
+    public function photos_over_16_megapixels_are_refused_from_the_header()
+    {
+        $header = function (int $w, int $h): UploadedFile {
+            $png = "\x89PNG\r\n\x1a\n".pack('N', 13).'IHDR'.pack('NN', $w, $h)."\x08\x02\x00\x00\x00";
+            $png .= pack('N', crc32(substr($png, 12, 17)));
+            $path = tempnam(sys_get_temp_dir(), 'tc');
+            file_put_contents($path, $png);
+
+            return new UploadedFile($path, filesize($path), UPLOAD_ERR_OK, 'p.png', 'image/png');
+        };
+        $photos = $this->app()->getContainer()->make(\ErnestDefoe\TimeCapsule\Photos::class);
+
+        $this->assertFalse($photos->fits($header(4500, 4000)), '18 MP');
+        $this->assertTrue($photos->fits($header(4000, 4000)), '16 MP');
+        $this->assertTrue($photos->fits($this->photo()));
+
+        // Every photo is checked before any is stored: nothing is left behind.
+        $dir = $this->app()->getContainer()->make(\Flarum\Foundation\Paths::class)->storage.'/time-capsule/photos';
+        $count = fn () => is_dir($dir) ? count(array_diff(scandir($dir), ['.', '..'])) : 0;
+        $before = $count();
+        $this->assertSame(422, $this->seal([], 2, [$this->photo(), $header(4500, 4000)])[0]);
+        $this->assertSame($before, $count());
+    }
+
+    #[Test]
     public function only_the_writer_or_a_moderator_deletes_and_photos_go_too()
     {
         [, $body] = $this->seal([], 2, [$this->photo()]);
