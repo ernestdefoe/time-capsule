@@ -63,7 +63,7 @@ export default class SealModal extends FormModal<Attrs> {
   oninit(vnode: Mithril.Vnode<Attrs, this>) {
     super.oninit(vnode);
     const limits = this.limits();
-    this.presetList = presets(limits.founded, limits.maxYears);
+    this.presetList = presets(limits.founded, limits.maxYears, limits.minHours);
     this.toCommunity = this.attrs.toCommunity && !!this.attrs.community;
     const tomorrow = new Date(Date.now() + 2 * 864e5);
     this.custom = dateInput(new Date(tomorrow.getFullYear() + 1, tomorrow.getMonth(), tomorrow.getDate()));

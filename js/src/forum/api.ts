@@ -153,14 +153,20 @@ export interface Preset {
   date: Date;
 }
 
-/** The open dates offered as one tap: next New Year, 1, 5 and 10 years, and the forum's next birthday. */
-export function presets(founded: string, maxYears: number): Preset[] {
+/**
+ * The open dates offered as one tap: next New Year, 1, 5 and 10 years, and the forum's next
+ * birthday. Each is at least `minHours` away, as the server requires: on New Year's Eve the
+ * New Year preset is the one after.
+ */
+export function presets(founded: string, maxYears: number, minHours: number): Preset[] {
   const now = new Date();
+  const soonest = now.getTime() + minHours * 36e5 + 6e4;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const later = (years: number) => new Date(today.getFullYear() + years, today.getMonth(), today.getDate());
   const list: Preset[] = [];
 
-  const newYear = new Date(today.getFullYear() + 1, 0, 1);
+  let newYear = new Date(today.getFullYear() + 1, 0, 1);
+  if (newYear.getTime() < soonest) newYear = new Date(today.getFullYear() + 2, 0, 1);
   list.push({ key: 'new_year', label: extractText(t('seal.preset.new_year', { year: newYear.getFullYear() })), date: newYear });
   for (const years of [1, 5, 10]) {
     if (years <= maxYears) list.push({ key: `years_${years}`, label: extractText(t('seal.preset.years', { count: years })), date: later(years) });
@@ -170,7 +176,7 @@ export function presets(founded: string, maxYears: number): Preset[] {
   if (match) {
     const [y, mo, d] = [+match[1], +match[2] - 1, +match[3]];
     let birthday = new Date(today.getFullYear(), mo, d);
-    if (birthday.getTime() - now.getTime() < 864e5) birthday = new Date(today.getFullYear() + 1, mo, d);
+    if (birthday.getTime() < soonest) birthday = new Date(today.getFullYear() + 1, mo, d);
     const age = birthday.getFullYear() - y;
     if (age > 0) list.push({ key: 'anniversary', label: extractText(t('seal.preset.anniversary', { count: age })), date: birthday });
   }
