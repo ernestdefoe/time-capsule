@@ -18,6 +18,7 @@
 use ErnestDefoe\TimeCapsule\Api;
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Console\OpenCommand;
+use ErnestDefoe\TimeCapsule\Gdpr\ExportActor;
 use ErnestDefoe\TimeCapsule\Gdpr\TimeCapsuleData;
 use ErnestDefoe\TimeCapsule\Http\PageContent;
 use ErnestDefoe\TimeCapsule\Notification\CapsuleOpenedBlueprint;
@@ -28,6 +29,8 @@ use Flarum\Api\Context;
 use Flarum\Api\Resource\ForumResource;
 use Flarum\Api\Schema;
 use Flarum\Extend;
+use Flarum\Gdpr\Events\Exported;
+use Flarum\Gdpr\Events\Exporting;
 use Flarum\Gdpr\Extend\UserData;
 use Flarum\User\Event\Deleting;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
@@ -92,5 +95,8 @@ return [
     (new Extend\Conditional())
         ->whenExtensionEnabled('flarum-gdpr', fn () => [
             (new UserData())->addType(TimeCapsuleData::class),
+            (new Extend\Event())
+                ->listen(Exporting::class, [ExportActor::class, 'exporting'])
+                ->listen(Exported::class, [ExportActor::class, 'exported']),
         ]),
 ];
