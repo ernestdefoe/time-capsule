@@ -80,7 +80,8 @@
   font-size: 13px;
   font-weight: 600;
 
-  li + li::before {
+  // After, not before: a wrapped line ends with the dot instead of starting with one.
+  li:not(:last-child)::after {
     content: '·';
     margin: 0 8px;
   }
