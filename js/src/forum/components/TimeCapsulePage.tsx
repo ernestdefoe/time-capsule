@@ -6,7 +6,7 @@ import Icon from 'flarum/common/components/Icon';
 import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { call, communityUrl, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
+import { call, communityRecord, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
 import Countdown from './Countdown';
 import { OpenedCard, SealedCard } from './Cards';
 import LetterView from './LetterView';
@@ -43,6 +43,8 @@ export default class TimeCapsulePage extends Page {
   /** The letter forms' limits, from whichever page loaded. */
   limits: PageData['limits'] | null = null;
   loadingMore = false;
+  /** Asked once per visit to open what's due (openDue). */
+  askedToOpen = false;
 
   oninit(vnode: Mithril.Vnode<any, this>) {
     super.oninit(vnode);
@@ -75,12 +77,36 @@ export default class TimeCapsulePage extends Page {
             });
 
     return request
+      .then(() => this.openDue())
       .catch((error) => {
         this.failed = errorText(error);
       })
       .finally(() => {
         this.loading = false;
         m.redraw();
+      });
+  }
+
+  /**
+   * Something on the page has reached its day but hasn't opened yet (the scheduler runs every
+   * minute, or isn't running on this forum): ask for it to open, then show it opened. Once per visit.
+   */
+  openDue(): Promise<void> | void {
+    const now = new Date().toISOString();
+    const due = (opensAt: string) => opensAt <= now;
+    const shown = [
+      ...(this.data?.mine.filter((l) => l.sealed).map((l) => l.opensAt) || []),
+      this.data?.community?.opensAt,
+      this.letter?.sealed ? this.letter.opensAt : undefined,
+      this.community && !this.community.community.openedAt ? this.community.community.opensAt : undefined,
+    ];
+    if (this.askedToOpen || !shown.some((opensAt) => opensAt && due(opensAt))) return;
+
+    this.askedToOpen = true;
+    return call<{ opened: number }>('POST', '/open', undefined, true)
+      .then((r) => (r.opened ? this.load() : undefined))
+      .catch(() => {
+        /* Quietly: the scheduler opens it within a minute anyway, and the page already shows it as due. */
       });
   }
 
@@ -482,9 +508,11 @@ export default class TimeCapsulePage extends Page {
 
   removeCommunity(c: CommunityRow) {
     if (!confirm(extractText(t('community.delete_confirm', { count: c.letters })))) return;
-    app.request({ method: 'DELETE', url: communityUrl(c.id) }).then(() => {
-      if (this.mode === 'community') m.route.set(app.route('time-capsule'));
-      else this.load();
-    });
+    communityRecord(c.id)
+      .delete()
+      .then(() => {
+        if (this.mode === 'community') m.route.set(app.route('time-capsule'));
+        else this.load();
+      });
   }
 }

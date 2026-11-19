@@ -170,7 +170,8 @@ class SealingTest extends TestCase
         $id = $body['capsule']['id'];
         $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute()]);
 
-        // The writer's page opens it (no scheduler run yet).
+        // The writer's page asks for it to open (no scheduler run yet).
+        $this->send_('POST', '/api/time-capsule/open', 2);
         [, $page] = $this->send_('GET', '/api/time-capsule', 2);
         $this->assertFalse($page['mine'][0]['sealed']);
         $this->assertStringContainsString(self::MARKER, $page['mine'][0]['body']);
@@ -213,8 +214,14 @@ class SealingTest extends TestCase
         [, $body] = $this->seal(['opensAt' => Carbon::now()->addDays(2)->toIso8601String()]);
         $id = $body['capsule']['id'];
         $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute()]);
+        $this->send_('POST', '/api/time-capsule/open', 2);
 
+        // Reading is a GET and changes nothing; the envelope opening on screen marks it read.
         $this->assertTrue($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead']);
+        $this->assertTrue($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead']);
+        $this->assertSame(204, $this->send_('POST', '/api/time-capsule/'.$id.'/read', 3)[0]);
+        $this->assertTrue($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead'], 'only the writer marks it');
+        $this->assertSame(204, $this->send_('POST', '/api/time-capsule/'.$id.'/read', 2)[0]);
         $this->assertFalse($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead']);
     }
 
@@ -250,7 +257,8 @@ class SealingTest extends TestCase
         $this->assertFileDoesNotExist($key);
         $this->assertSame(1, $this->database()->table('time_capsules')->count());
 
-        // Reading still works: the letter shows as unreadable, nothing 500s.
+        // Opening and reading still work: the letter shows as unreadable, nothing 500s.
+        $this->assertSame(200, $this->send_('POST', '/api/time-capsule/open', 2)[0]);
         [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$body['capsule']['id'], 2);
         $this->assertSame(200, $status);
         $this->assertFalse($show['capsule']['readable']);

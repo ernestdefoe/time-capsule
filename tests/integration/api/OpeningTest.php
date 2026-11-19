@@ -294,6 +294,13 @@ class OpeningTest extends TestCase
         $this->assertSame(204, $this->json('DELETE', '/api/time-capsule-communities/'.$id, 1)[0]);
         $this->assertSame(0, $this->database()->table('time_capsules')->count());
 
+        // Another admin starting one at this very moment holds the lock: refused, not doubled.
+        $lock = $this->app()->getContainer()->make(\ErnestDefoe\TimeCapsule\Locks::class)->lock('community', 10);
+        $this->assertTrue($lock->get());
+        $this->assertSame(422, $this->community('POST', null, 1, ['title' => 'Racing', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String()])[0]);
+        $lock->release();
+        $this->assertSame(0, $this->database()->table('time_capsule_communities')->count());
+
         // An opened one can't be changed.
         [, $created] = $this->community('POST', null, 1, ['title' => 'Opened', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String()]);
         $this->database()->table('time_capsule_communities')->update(['opened_at' => Carbon::now()]);
@@ -314,18 +321,28 @@ class OpeningTest extends TestCase
     }
 
     #[Test]
-    public function with_the_scheduler_running_viewing_a_page_changes_nothing()
+    public function viewing_never_writes_and_the_page_asks_to_open_what_is_due()
     {
-        $id = $this->seal();
-        $this->opener()->run();
-        $this->due($id);
+        $mine = $this->seal();
+        $theirs = $this->seal([], 3);
+        $this->due($mine);
+        $this->due($theirs);
 
         $this->assertSame(200, $this->json('GET', '/api/time-capsule', 2)[0]);
-        $this->assertSame(200, $this->json('GET', '/api/time-capsule/'.$id, 2)[0]);
-        $this->assertNull($this->database()->table('time_capsules')->where('id', $id)->value('opened_at'));
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule/'.$mine, 2)[0]);
+        $this->assertNull($this->database()->table('time_capsules')->where('id', $mine)->value('opened_at'));
 
-        $this->opener()->run();
-        $this->assertNotNull($this->database()->table('time_capsules')->where('id', $id)->value('opened_at'));
+        // The page's open request opens the viewer's own due letters, never anyone else's.
+        [$status, $body] = $this->json('POST', '/api/time-capsule/open', 2);
+        $this->assertSame(200, $status);
+        $this->assertSame(1, $body['opened']);
+        $this->assertNotNull($this->database()->table('time_capsules')->where('id', $mine)->value('opened_at'));
+        $this->assertNull($this->database()->table('time_capsules')->where('id', $theirs)->value('opened_at'));
+        $this->assertSame(1, $this->notifications('timeCapsuleOpened', 2));
+
+        // Again: nothing more opens, nobody is notified twice.
+        $this->assertSame(0, $this->json('POST', '/api/time-capsule/open', 2)[1]['opened']);
+        $this->assertSame(1, $this->notifications('timeCapsuleOpened', 2));
     }
 
     #[Test]

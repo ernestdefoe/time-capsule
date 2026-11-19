@@ -1,9 +1,10 @@
+import app from 'flarum/forum/app';
 import FormModal, { type IFormModalAttrs } from 'flarum/common/components/FormModal';
 import Button from 'flarum/common/components/Button';
 import Switch from 'flarum/common/components/Switch';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { communityUrl, dateInput, localMidnight, t, type CommunityRow } from '../api';
+import { communityRecord, dateInput, localMidnight, t, type CommunityRow } from '../api';
 
 interface Attrs extends IFormModalAttrs {
   community: CommunityRow | null;
@@ -16,6 +17,8 @@ export default class CommunityModal extends FormModal<Attrs> {
   title_ = '';
   description = '';
   date = '';
+  /** The day as the modal opened: sent again only if it was changed (it's shown in this browser's time zone). */
+  initialDate = '';
   post = true;
   notifyEveryone = true;
 
@@ -25,7 +28,7 @@ export default class CommunityModal extends FormModal<Attrs> {
     const nextYear = new Date(new Date().getFullYear() + 1, 0, 1);
     this.title_ = c?.title || '';
     this.description = c?.description || '';
-    this.date = dateInput(c ? new Date(c.opensAt) : nextYear);
+    this.date = this.initialDate = dateInput(c ? new Date(c.opensAt) : nextYear);
     this.post = c ? c.post : true;
     this.notifyEveryone = c ? c.notifyEveryone : true;
   }
@@ -123,33 +126,23 @@ export default class CommunityModal extends FormModal<Attrs> {
     this.loading = true;
 
     const c = this.attrs.community;
-    app
-      .request({
-        method: c ? 'PATCH' : 'POST',
-        url: communityUrl(c?.id),
-        body: {
-          data: {
-            type: 'time-capsule-communities',
-            ...(c ? { id: String(c.id) } : {}),
-            attributes: {
-              title: this.title_,
-              description: this.description,
-              opensAt: localMidnight(+match[1], +match[2] - 1, +match[3]),
-              post: this.post,
-              notifyEveryone: this.notifyEveryone,
-            },
-          },
-        },
-      })
-      .then(
-        () => {
-          this.hide();
-          this.attrs.onsave();
-        },
-        () => {
-          this.loading = false;
-          m.redraw();
-        }
-      );
+    const attributes: Record<string, unknown> = {
+      title: this.title_,
+      description: this.description,
+      post: this.post,
+      notifyEveryone: this.notifyEveryone,
+    };
+    if (!c || this.date !== this.initialDate) attributes.opensAt = localMidnight(+match[1], +match[2] - 1, +match[3]);
+
+    (c ? communityRecord(c.id) : app.store.createRecord('time-capsule-communities')).save(attributes).then(
+      () => {
+        this.hide();
+        this.attrs.onsave();
+      },
+      () => {
+        this.loading = false;
+        m.redraw();
+      }
+    );
   }
 }

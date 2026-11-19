@@ -14,7 +14,6 @@ use Flarum\Http\UrlGenerator;
 use Flarum\Locale\TranslatorInterface;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\User\User;
-use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
@@ -43,10 +42,6 @@ class Opener
     private const CHUNK = 500;
     private const CHUNKS_PER_RUN = 20;
     private const MAX_POST_ATTEMPTS = 3;
-    /** Written by every scheduled run; while it's there, page views leave opening to the scheduler. */
-    private const HEARTBEAT = 'time-capsule:scheduler';
-
-    private ?bool $scheduled = null;
 
     public function __construct(
         private readonly Vault $vault,
@@ -57,14 +52,12 @@ class Opener
         private readonly UrlGenerator $url,
         private readonly LoggerInterface $log,
         private readonly ConnectionInterface $db,
-        private readonly Cache $cache,
     ) {
     }
 
     /** The scheduler's run. Returns how many letters and community capsules it opened. */
     public function run(): int
     {
-        $this->cache->put(self::HEARTBEAT, time(), 300);
         $opened = 0;
         $now = Carbon::now();
 
@@ -95,23 +88,29 @@ class Opener
     }
 
     /**
-     * For forums whose scheduler isn't running: a page that shows a due letter opens it. While the
-     * scheduler is running (it ran in the last five minutes), page views only read.
+     * What a viewer's page found due (POST /api/time-capsule/open, sent by the page when it shows
+     * a letter or capsule whose day has come): their own due letters and any due community
+     * capsule. The scheduler opens the same within a minute; this is for the moment between, and
+     * for forums whose scheduler isn't running. Page views themselves never write.
      */
-    public function openOnView(Capsule $capsule): bool
+    public function openFor(User $actor): int
     {
-        return ! $this->scheduled() && $this->open($capsule);
-    }
+        $opened = 0;
+        Community::query()->whereNull('opened_at')->where('opens_at', '<=', Carbon::now())->get()
+            ->each(function (Community $community) use (&$opened) {
+                $opened += (int) $this->openCommunity($community);
+            });
 
-    /** As openOnView(), for a community capsule. */
-    public function openCommunityOnView(Community $community): bool
-    {
-        return ! $this->scheduled() && $this->openCommunity($community);
-    }
+        if (! $actor->isGuest()) {
+            Capsule::query()->where('user_id', $actor->id)->whereNull('opened_at')->whereNull('community_id')
+                ->where('opens_at', '<=', Carbon::now())->limit(Settings::MAX_SEALED)->get()
+                ->each(function (Capsule $capsule) use ($actor, &$opened) {
+                    $capsule->setRelation('user', $actor);
+                    $opened += (int) $this->open($capsule);
+                });
+        }
 
-    private function scheduled(): bool
-    {
-        return $this->scheduled ??= $this->cache->has(self::HEARTBEAT);
+        return $opened;
     }
 
     /** Opens one letter if its day has come. True only for the caller that opened it. */
@@ -128,7 +127,7 @@ class Opener
             $capsule->opened_at = Capsule::query()->whereKey($capsule->id)->value('opened_at');
         } else {
             $capsule->opened_at = $now;
-            // Page loads open letters too: a failed notification must not fail the page.
+            // A page's open request opens letters too: a failed notification must not fail it.
             // notified_at stays empty and the scheduler's follow-up tries again.
             $this->guard('letter '.$capsule->id, fn () => $this->notifyWriter($capsule));
         }
@@ -208,9 +207,11 @@ class Opener
 
             return;
         }
+
+        $recipients = $this->recipients($community);
         for ($i = 0; $i < self::CHUNKS_PER_RUN; $i++) {
             $after = $community->notify_cursor;
-            $users = $this->recipients($community)->where('users.id', '>', $after)->orderBy('users.id')->limit(self::CHUNK)->get();
+            $users = $recipients->clone()->where('users.id', '>', $after)->orderBy('users.id')->limit(self::CHUNK)->get();
 
             if ($users->isEmpty()) {
                 $community->notified_at = Carbon::now();
@@ -229,7 +230,7 @@ class Opener
 
     /**
      * Who hears that a community capsule opened: every confirmed member (or only its writers) who
-     * may view time capsules. Groups with the permission are asked once, not per member.
+     * may view time capsules. Groups with the permission are asked once per run, not per member.
      *
      * @return Builder<User>
      */

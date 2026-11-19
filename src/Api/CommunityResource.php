@@ -5,6 +5,8 @@ namespace ErnestDefoe\TimeCapsule\Api;
 use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
+use ErnestDefoe\TimeCapsule\Locks;
+use ErnestDefoe\TimeCapsule\Photo;
 use ErnestDefoe\TimeCapsule\Photos;
 use ErnestDefoe\TimeCapsule\Settings;
 use Flarum\Api\Context;
@@ -38,6 +40,7 @@ class CommunityResource extends AbstractDatabaseResource
         private readonly SettingsRepositoryInterface $settings,
         private readonly TranslatorInterface $translator,
         private readonly ConnectionInterface $db,
+        private readonly Locks $locks,
     ) {
     }
 
@@ -62,7 +65,6 @@ class CommunityResource extends AbstractDatabaseResource
     public function endpoints(): array
     {
         return [
-            Endpoint\Show::make(),
             Endpoint\Create::make()->authenticated()->can(Settings::COMMUNITY),
             Endpoint\Update::make()->authenticated()->can(Settings::COMMUNITY),
             Endpoint\Delete::make()->authenticated()->can(Settings::COMMUNITY),
@@ -117,20 +119,53 @@ class CommunityResource extends AbstractDatabaseResource
         return $model;
     }
 
-    /** @param Community $model */
+    /**
+     * A new capsule is saved under a lock (one sealed at a time: two admins starting one at once
+     * can't both get one); a changed day moves every letter in it too, in the same transaction.
+     *
+     * @param Community $model
+     */
     protected function saveModel(Model $model, BaseContext $context): void
     {
-        $this->db->transaction(function () use ($model) {
+        if ($model->exists) {
+            $this->db->transaction(function () use ($model) {
+                $model->save();
+                Capsule::query()->where('community_id', $model->id)->whereNull('opened_at')->update(['opens_at' => $model->opens_at]);
+            });
+
+            return;
+        }
+
+        $saved = $this->locks->lock('community', 10)->get(function () use ($model) {
+            if (Community::query()->whereNull('opened_at')->exists()) {
+                return false;
+            }
             $model->save();
-            // Every letter in it opens on its day.
-            Capsule::query()->where('community_id', $model->id)->whereNull('opened_at')->update(['opens_at' => $model->opens_at]);
+
+            return true;
         });
+        if ($saved !== true) {
+            throw new ValidationException(['title' => $this->trans('community_exists')]);
+        }
     }
 
-    /** @param Community $model */
-    public function deleting(object $model, BaseContext $context): void
+    /**
+     * The capsule and every letter in it go in one transaction; the photo files after it commits.
+     *
+     * @param Community $model
+     */
+    public function delete(object $model, BaseContext $context): void
     {
-        $this->photos->deleteCapsules(Capsule::query()->where('community_id', $model->id)->pluck('id'));
+        $letters = Capsule::query()->select('id')->where('community_id', $model->id);
+        $files = Photo::query()->whereIn('capsule_id', $letters)->pluck('file');
+
+        $this->db->transaction(function () use ($model, $letters) {
+            Photo::query()->whereIn('capsule_id', $letters->clone())->delete();
+            Capsule::query()->where('community_id', $model->id)->delete();
+            $model->delete();
+        });
+
+        $this->photos->forget($files);
     }
 
     private function checkDay(Community $model): void

@@ -5,7 +5,7 @@ import Link from 'flarum/common/components/Link';
 import Icon from 'flarum/common/components/Icon';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { duration, longDate, t, type Letter, type PhotoRow } from '../api';
+import { call, duration, longDate, t, type Letter, type PhotoRow } from '../api';
 import { Avatar, personLink } from './Cards';
 
 interface Attrs extends ComponentAttrs {
@@ -31,7 +31,13 @@ export default class LetterView extends Component<Attrs> {
 
   oninit(vnode: Mithril.Vnode<Attrs, this>) {
     super.oninit(vnode);
-    this.unsealing = !!this.attrs.letter.firstRead && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const letter = this.attrs.letter;
+    this.unsealing = !!letter.firstRead && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // It's been read now: the next visit shows it as an ordinary letter.
+    if (letter.firstRead)
+      call('POST', `/${letter.id}/read`, undefined, true).catch(() => {
+        /* Not worth an alert: at worst the envelope opens once more next time. */
+      });
   }
 
   oncreate(vnode: Mithril.VnodeDOM<Attrs, this>) {

@@ -12,7 +12,7 @@ Letters to the future, for Flarum 2. Members write a letter, add photos, and pic
 - **Opening day.** The scheduler opens letters on the minute their day starts. The writer gets a notification and an email, and the first time they read it the envelope opens. A public letter shows up under "Recently opened", and can start a discussion as its writer.
 - **Community capsules.** An admin starts a forum-wide capsule ("Hopes and predictions for 2027"), members add letters, and everything opens on one day for everyone, with a live countdown on the Time Capsule page, a notification for every member and an optional discussion.
 - **A home for it all.** /time-capsule has your sealed letters, your opened ones, recently opened public letters, the community countdown and past community capsules.
-- **Safe to run.** Opening is idempotent: the scheduler can run every minute, overlap a page load, or crash halfway, and nobody is notified twice or gets two discussions. Forums without a running scheduler still open letters when they're viewed; with the scheduler running, viewing a page never changes anything.
+- **Safe to run.** Opening is idempotent: the scheduler can run every minute, overlap a page load, or crash halfway, and nobody is notified twice or gets two discussions. Forums without a running scheduler still open letters when their writers look at them.
 - **Permissions** to view, write letters, run the community capsule and delete letters as a moderator.
 - **GDPR**: with Flarum's GDPR extension, a member's letters are in their data export (sealed ones as their card) and are deleted on erasure.
 
@@ -26,7 +26,7 @@ Letters are encrypted with the key in `storage/time-capsule/key` (or `'time-caps
 
 ## Why letters have their own endpoints
 
-Letters are served by plain JSON endpoints under `/api/time-capsule` (the page, one letter, a photo, sealing, deleting, a community capsule's letters), not by a JSON:API resource. That is on purpose: with no letter resource, no `include` from any other resource or extension can ever reach a letter, so a sealed letter's words can't leak through one. Each endpoint asks one gate (`Access::canRead()`) and decrypts in one place (`Present::capsule()`), and the tests check every endpoint for every viewer. The community capsule itself, which holds no letter text, is an ordinary resource: `time-capsule-communities`.
+Letters are served by plain JSON endpoints under `/api/time-capsule` (the page, your opened letters, one letter, a photo, sealing, deleting, marking a letter read, opening due ones, a community capsule's letters), not by a JSON:API resource. That is on purpose: with no letter resource, no `include` from any other resource or extension can ever reach a letter, so a sealed letter's words can't leak through one. Each endpoint asks one gate (`Access::canRead()`) and decrypts in one place (`Present::capsule()`), and the tests check every endpoint for every viewer. The community capsule itself, which holds no letter text, is an ordinary resource: `time-capsule-communities`.
 
 ## Install
 

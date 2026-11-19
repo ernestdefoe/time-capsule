@@ -7,7 +7,6 @@ use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
 use ErnestDefoe\TimeCapsule\DiscussionTags;
 use ErnestDefoe\TimeCapsule\OpenedLetters;
-use ErnestDefoe\TimeCapsule\Opener;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
 use Flarum\Http\RequestUtil;
@@ -23,8 +22,8 @@ use Psr\Http\Server\RequestHandlerInterface;
  * GET /api/time-capsule: everything the /time-capsule page shows in one
  * answer: your letters (sealed ones as cards only), recently opened public
  * letters, the community capsule's countdown, recently opened community
- * capsules, and forum-wide counts. On a forum whose scheduler isn't running,
- * a due letter is opened here, through the same idempotent Opener.
+ * capsules, and forum-wide counts. Only reads: a letter whose day has come
+ * but isn't open yet shows as due, and the page asks POST /api/time-capsule/open.
  */
 class PageController implements RequestHandlerInterface
 {
@@ -32,7 +31,6 @@ class PageController implements RequestHandlerInterface
 
     public function __construct(
         private readonly Present $present,
-        private readonly Opener $opener,
         private readonly OpenedLetters $mine,
         private readonly SettingsRepositoryInterface $settings,
         private readonly DiscussionTags $tags,
@@ -45,20 +43,14 @@ class PageController implements RequestHandlerInterface
         $actor->assertCan(Settings::VIEW);
 
         $community = Community::query()->whereNull('opened_at')->orderBy('opens_at')->first();
-        if ($community && $this->opener->openCommunityOnView($community)) {
-            $community = null;
-        }
 
         // Sealed letters are capped (Settings::MAX_SEALED), so they all come; opened ones come a page
         // at a time (Api\MineController serves the rest).
         $sealed = $actor->isGuest() ? new Collection() : Capsule::query()->where('user_id', $actor->id)->whereNull('opened_at')
             ->with(Present::with($actor, false))->orderBy('opens_at')->limit(Settings::MAX_SEALED)->get();
-        $sealed->each(function (Capsule $capsule) use ($actor) {
-            $capsule->setRelation('user', $actor);
-            $this->opener->openOnView($capsule);
-        });
+        $sealed->each(fn (Capsule $capsule) => $capsule->setRelation('user', $actor));
         [$opened, $moreMine] = $actor->isGuest() ? [new Collection(), false] : $this->mine->page($actor, 0);
-        $mine = $sealed->reject(fn (Capsule $c) => $c->isOpen())->concat($opened);
+        $mine = $sealed->concat($opened);
 
         $recent = Capsule::query()->whereNotNull('opened_at')->whereNull('community_id')->where('visibility', Capsule::PUBLIC)
             ->with(Present::with($actor))->orderByDesc('opened_at')->limit(self::RECENT)->get();

@@ -11,8 +11,9 @@
  * letters: no API resource, so no include can ever pull one in.
  *
  * The scheduler opens letters every minute (Opener: idempotent, safe to
- * overlap or rerun). On a forum whose scheduler hasn't run in five minutes,
- * the pages open any due letter they show; otherwise they only read.
+ * overlap or rerun). GET requests only read: a page that shows a due letter
+ * asks POST /api/time-capsule/open, which opens the viewer's own due letters
+ * (forums without a running scheduler still open letters).
  */
 
 use ErnestDefoe\TimeCapsule\Api;
@@ -55,7 +56,9 @@ return [
         ->get('/time-capsule', 'time-capsule.index', Api\PageController::class)
         ->post('/time-capsule', 'time-capsule.seal', Api\SealController::class)
         ->get('/time-capsule/mine', 'time-capsule.mine', Api\MineController::class)
+        ->post('/time-capsule/open', 'time-capsule.open', Api\OpenController::class)
         ->get('/time-capsule/{id:\d+}', 'time-capsule.show', Api\ShowController::class)
+        ->post('/time-capsule/{id:\d+}/read', 'time-capsule.read', Api\ReadController::class)
         ->delete('/time-capsule/{id:\d+}', 'time-capsule.delete', Api\DeleteController::class)
         ->get('/time-capsule/{id:\d+}/photos/{photo:\d+}', 'time-capsule.photo', Api\PhotoController::class)
         ->get('/time-capsule/community/{id:\d+}', 'time-capsule.community.show', Api\CommunityLettersController::class),

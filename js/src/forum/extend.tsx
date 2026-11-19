@@ -3,6 +3,7 @@ import Extend from 'flarum/common/extenders';
 import Notification from 'flarum/forum/components/Notification';
 import type Mithril from 'mithril';
 import { longDate, t } from './util';
+import Community from './models/Community';
 
 /*
  * The declarative half of the forum: the routes (the page is a chunk fetched when someone opens
@@ -49,6 +50,7 @@ class CommunityOpenedNotification extends Notification {
 const page = () => import('./components/TimeCapsulePage').then(async (module) => (await module.loadCore(), module));
 
 export default [
+  new Extend.Store().add('time-capsule-communities', Community),
   new Extend.Routes()
     .add('time-capsule', '/time-capsule', page)
     .add('time-capsule.letter', '/time-capsule/:id', page)

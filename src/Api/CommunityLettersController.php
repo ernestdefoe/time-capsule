@@ -4,7 +4,6 @@ namespace ErnestDefoe\TimeCapsule\Api;
 
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
-use ErnestDefoe\TimeCapsule\Opener;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
 use Flarum\Http\RequestUtil;
@@ -27,11 +26,8 @@ class CommunityLettersController implements RequestHandlerInterface
 {
     private const PAGE = 30;
 
-    public function __construct(
-        private readonly Present $present,
-        private readonly Opener $opener,
-        private readonly SettingsRepositoryInterface $settings,
-    ) {
+    public function __construct(private readonly Present $present, private readonly SettingsRepositoryInterface $settings)
+    {
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -42,7 +38,6 @@ class CommunityLettersController implements RequestHandlerInterface
         if (! $community) {
             return Errors::make(404, 'not_found');
         }
-        $this->opener->openCommunityOnView($community);
 
         $base = Capsule::query()->where('community_id', $community->id);
         $counts = [
