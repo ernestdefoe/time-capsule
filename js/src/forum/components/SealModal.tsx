@@ -10,7 +10,7 @@ import { call, dateInput, duration, localMidnight, presets, t, type CommunityRow
 interface Attrs extends IFormModalAttrs {
   community: CommunityRow | null;
   toCommunity: boolean;
-  limits?: PageData['limits'];
+  limits: PageData['limits'];
   canPost: boolean;
   onsealed: (letter: Letter) => void;
 }
@@ -73,7 +73,7 @@ export default class SealModal extends FormModal<Attrs> {
   }
 
   limits(): PageData['limits'] {
-    return this.attrs.limits || { maxYears: 25, maxPhotos: 4, maxLength: 20000, minHours: 20, founded: '' };
+    return this.attrs.limits;
   }
 
   className() {

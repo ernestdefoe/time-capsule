@@ -3,7 +3,7 @@ import Button from 'flarum/common/components/Button';
 import Switch from 'flarum/common/components/Switch';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { call, dateInput, localMidnight, t, type CommunityRow } from '../api';
+import { communityUrl, dateInput, localMidnight, t, type CommunityRow } from '../api';
 
 interface Attrs extends IFormModalAttrs {
   community: CommunityRow | null;
@@ -123,21 +123,33 @@ export default class CommunityModal extends FormModal<Attrs> {
     this.loading = true;
 
     const c = this.attrs.community;
-    call(c ? 'PATCH' : 'POST', c ? '/community/' + c.id : '/community', {
-      title: this.title_,
-      description: this.description,
-      opensAt: localMidnight(+match[1], +match[2] - 1, +match[3]),
-      post: this.post,
-      notifyEveryone: this.notifyEveryone,
-    }).then(
-      () => {
-        this.hide();
-        this.attrs.onsave();
-      },
-      () => {
-        this.loading = false;
-        m.redraw();
-      }
-    );
+    app
+      .request({
+        method: c ? 'PATCH' : 'POST',
+        url: communityUrl(c?.id),
+        body: {
+          data: {
+            type: 'time-capsule-communities',
+            ...(c ? { id: String(c.id) } : {}),
+            attributes: {
+              title: this.title_,
+              description: this.description,
+              opensAt: localMidnight(+match[1], +match[2] - 1, +match[3]),
+              post: this.post,
+              notifyEveryone: this.notifyEveryone,
+            },
+          },
+        },
+      })
+      .then(
+        () => {
+          this.hide();
+          this.attrs.onsave();
+        },
+        () => {
+          this.loading = false;
+          m.redraw();
+        }
+      );
   }
 }

@@ -9,11 +9,14 @@ use Flarum\Api\JsonApi;
 use Flarum\Api\Resource\DiscussionResource;
 use Flarum\Discussion\Discussion;
 use Flarum\Group\Group;
+use Flarum\Group\Permission;
 use Flarum\Http\UrlGenerator;
 use Flarum\Locale\TranslatorInterface;
-use Flarum\Notification\Notification;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\User\User;
+use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -29,7 +32,10 @@ use Throwable;
  *  - a discussion is claimed the same way (`posted_at IS NULL`) and released
  *    for a retry (three tries) if posting throws;
  *  - a community's notifications go out in chunks by user id behind a
- *    cursor, skipping anyone who already has it.
+ *    cursor, each chunk a sync of its own blueprint, so a rerun repeats
+ *    nobody;
+ *  - letters of a community capsule that has opened are opened on every
+ *    run, whatever stopped them opening with it.
  */
 class Opener
 {
@@ -37,6 +43,10 @@ class Opener
     private const CHUNK = 500;
     private const CHUNKS_PER_RUN = 20;
     private const MAX_POST_ATTEMPTS = 3;
+    /** Written by every scheduled run; while it's there, page views leave opening to the scheduler. */
+    private const HEARTBEAT = 'time-capsule:scheduler';
+
+    private ?bool $scheduled = null;
 
     public function __construct(
         private readonly Vault $vault,
@@ -46,17 +56,20 @@ class Opener
         private readonly TranslatorInterface $translator,
         private readonly UrlGenerator $url,
         private readonly LoggerInterface $log,
+        private readonly ConnectionInterface $db,
+        private readonly Cache $cache,
     ) {
     }
 
     /** The scheduler's run. Returns how many letters and community capsules it opened. */
     public function run(): int
     {
+        $this->cache->put(self::HEARTBEAT, time(), 300);
         $opened = 0;
         $now = Carbon::now();
 
         Capsule::query()->whereNull('opened_at')->whereNull('community_id')->where('opens_at', '<=', $now)
-            ->orderBy('opens_at')->limit(self::BATCH)->get()
+            ->with('user')->orderBy('opens_at')->limit(self::BATCH)->get()
             ->each(function (Capsule $capsule) use (&$opened) {
                 $this->guard('letter '.$capsule->id, function () use ($capsule, &$opened) {
                     $opened += (int) $this->open($capsule);
@@ -70,9 +83,35 @@ class Opener
                 });
             });
 
+        // A letter sealed into a community capsule in the moment it opened, or left by a run that
+        // stopped between the capsule and its letters, opens with the capsule all the same.
+        Capsule::query()->whereNull('opened_at')
+            ->whereIn('community_id', Community::query()->select('id')->whereNotNull('opened_at'))
+            ->update(['opened_at' => $now]);
+
         $this->followUp();
 
         return $opened;
+    }
+
+    /**
+     * For forums whose scheduler isn't running: a page that shows a due letter opens it. While the
+     * scheduler is running (it ran in the last five minutes), page views only read.
+     */
+    public function openOnView(Capsule $capsule): bool
+    {
+        return ! $this->scheduled() && $this->open($capsule);
+    }
+
+    /** As openOnView(), for a community capsule. */
+    public function openCommunityOnView(Community $community): bool
+    {
+        return ! $this->scheduled() && $this->openCommunity($community);
+    }
+
+    private function scheduled(): bool
+    {
+        return $this->scheduled ??= $this->cache->has(self::HEARTBEAT);
     }
 
     /** Opens one letter if its day has come. True only for the caller that opened it. */
@@ -84,8 +123,10 @@ class Opener
 
         $now = Carbon::now();
         $won = Capsule::query()->whereKey($capsule->id)->whereNull('opened_at')->update(['opened_at' => $now]) === 1;
-        $capsule->opened_at = $capsule->opened_at ?? Capsule::query()->whereKey($capsule->id)->value('opened_at');
-        if ($won) {
+        if (! $won) {
+            // Someone else opened it a moment ago: show their time.
+            $capsule->opened_at = Capsule::query()->whereKey($capsule->id)->value('opened_at');
+        } else {
             $capsule->opened_at = $now;
             // Page loads open letters too: a failed notification must not fail the page.
             // notified_at stays empty and the scheduler's follow-up tries again.
@@ -103,10 +144,16 @@ class Opener
         }
 
         $now = Carbon::now();
-        $won = Community::query()->whereKey($community->id)->whereNull('opened_at')->update(['opened_at' => $now]) === 1;
+        $won = $this->db->transaction(function () use ($community, $now) {
+            $won = Community::query()->whereKey($community->id)->whereNull('opened_at')->update(['opened_at' => $now]) === 1;
+            if ($won) {
+                Capsule::query()->where('community_id', $community->id)->whereNull('opened_at')->update(['opened_at' => $now]);
+            }
+
+            return $won;
+        });
         if ($won) {
             $community->opened_at = $now;
-            Capsule::query()->where('community_id', $community->id)->whereNull('opened_at')->update(['opened_at' => $now]);
         }
 
         return $won;
@@ -161,13 +208,9 @@ class Opener
 
             return;
         }
-        $blueprint = new CommunityOpenedBlueprint($community, $subject);
-
         for ($i = 0; $i < self::CHUNKS_PER_RUN; $i++) {
-            $query = $community->notify_everyone
-                ? User::query()->where('is_email_confirmed', true)
-                : User::query()->whereIn('id', Capsule::query()->select('user_id')->where('community_id', $community->id));
-            $users = $query->where('id', '>', $community->notify_cursor)->orderBy('id')->limit(self::CHUNK)->get();
+            $after = $community->notify_cursor;
+            $users = $this->recipients($community)->where('users.id', '>', $after)->orderBy('users.id')->limit(self::CHUNK)->get();
 
             if ($users->isEmpty()) {
                 $community->notified_at = Carbon::now();
@@ -176,17 +219,33 @@ class Opener
                 return;
             }
 
-            $have = Notification::query()->matchingBlueprint($blueprint)->whereIn('user_id', $users->modelKeys())->pluck('user_id')->all();
-            $new = $users->reject(fn (User $user) => in_array($user->id, $have))->values()->all();
-            if ($new) {
-                foreach (NotificationSyncer::getNotificationDrivers() as $driver) {
-                    $driver->send($blueprint, $new);
-                }
-            }
+            // Its own blueprint per chunk: sync() leaves other chunks alone and never repeats this one.
+            $this->notifications->sync(new CommunityOpenedBlueprint($community, $subject, $after), $users->all());
 
             $community->notify_cursor = (int) $users->last()->id;
             $community->save();
         }
+    }
+
+    /**
+     * Who hears that a community capsule opened: every confirmed member (or only its writers) who
+     * may view time capsules. Groups with the permission are asked once, not per member.
+     *
+     * @return Builder<User>
+     */
+    private function recipients(Community $community): Builder
+    {
+        $query = $community->notify_everyone
+            ? User::query()->where('is_email_confirmed', true)
+            : User::query()->whereIn('id', Capsule::query()->select('user_id')->where('community_id', $community->id));
+
+        $groups = Permission::query()->where('permission', Settings::VIEW)->pluck('group_id')->map(fn ($id) => (int) $id)->all();
+        if (array_intersect($groups, [Group::GUEST_ID, Group::MEMBER_ID])) {
+            return $query;
+        }
+        $groups[] = Group::ADMINISTRATOR_ID;
+
+        return $query->whereHas('groups', fn (Builder $q) => $q->whereIn('groups.id', $groups));
     }
 
     private function postLetter(Capsule $capsule): void

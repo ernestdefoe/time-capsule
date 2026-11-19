@@ -32,9 +32,9 @@ class ShowController implements RequestHandlerInterface
         $actor = RequestUtil::getActor($request);
         $actor->assertCan(Settings::VIEW);
 
-        $capsule = Capsule::query()->with(['user', 'photos', 'discussion'])->find((int) Arr::get($request->getQueryParams(), 'id'));
+        $capsule = Capsule::query()->with(Present::with($actor))->find((int) Arr::get($request->getQueryParams(), 'id'));
         if ($capsule) {
-            $this->opener->open($capsule);
+            $this->opener->openOnView($capsule);
         }
 
         $mine = $capsule && ! $actor->isGuest() && $capsule->user_id === $actor->id;

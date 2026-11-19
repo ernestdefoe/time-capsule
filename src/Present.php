@@ -21,6 +21,22 @@ class Present
     }
 
     /**
+     * The relations a letter's row shows, for eager loading. Its discussion only when the viewer
+     * may see it (a hidden discussion, or one in a tag closed to them, is left out).
+     *
+     * @return array<int|string, string|callable>
+     */
+    public static function with(User $actor, bool $user = true): array
+    {
+        return array_merge($user ? ['user'] : [], ['photos', 'discussion' => self::visibleDiscussion($actor)]);
+    }
+
+    public static function visibleDiscussion(User $actor): callable
+    {
+        return fn ($query) => $query->whereVisibleTo($actor);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function capsule(Capsule $capsule, User $actor, bool $full = false): array
@@ -59,6 +75,7 @@ class Present
             'height' => $p->height,
         ])->values()->all() : [];
         $row['author'] = $this->user($capsule->user);
+        // Loaded with Present::with(): null when the viewer may not see the discussion.
         $row['discussion'] = $capsule->discussion_id && $capsule->relationLoaded('discussion') && $capsule->discussion
             ? ['id' => $capsule->discussion->id, 'slug' => $capsule->discussion->slug, 'title' => $capsule->discussion->title]
             : null;
@@ -85,7 +102,8 @@ class Present
             'mine' => $counts['mine'] ?? 0,
             'post' => $community->post_to_discussion,
             'notifyEveryone' => $community->notify_everyone,
-            'discussionId' => $community->discussion_id,
+            // Loaded with Present::visibleDiscussion(): only a discussion the viewer may see.
+            'discussionId' => $community->relationLoaded('discussion') ? $community->discussion?->id : null,
             'canManage' => $actor->can(Settings::COMMUNITY),
         ];
     }

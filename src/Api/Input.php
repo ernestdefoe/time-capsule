@@ -29,7 +29,7 @@ final class Input
      *
      * @param array<string, mixed> $body
      */
-    public static function opensAt(array $body, SettingsRepositoryInterface $settings, int $minHours = Settings::MIN_HOURS): ?Carbon
+    public static function opensAt(array $body, SettingsRepositoryInterface $settings): ?Carbon
     {
         $value = $body['opensAt'] ?? null;
         if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/', $value)) {
@@ -43,11 +43,27 @@ final class Input
             return null;
         }
 
-        if ($at < Carbon::now()->addHours($minHours) || $at > Carbon::now()->addYears(self::maxYears($settings))->addDays(2)) {
+        if ($at < Carbon::now()->addHours(Settings::MIN_HOURS) || $at > Carbon::now()->addYears(self::maxYears($settings))->addDays(2)) {
             return null;
         }
 
         return $at;
+    }
+
+    /**
+     * What the letter forms need to know, the same on every page that has them.
+     *
+     * @return array{maxYears: int, maxPhotos: int, maxLength: int, minHours: int, founded: string}
+     */
+    public static function limits(SettingsRepositoryInterface $settings): array
+    {
+        return [
+            'maxYears' => self::maxYears($settings),
+            'maxPhotos' => Settings::MAX_PHOTOS,
+            'maxLength' => Settings::MAX_LENGTH,
+            'minHours' => Settings::MIN_HOURS,
+            'founded' => (string) $settings->get(Settings::FOUNDED),
+        ];
     }
 
     public static function maxYears(SettingsRepositoryInterface $settings): int

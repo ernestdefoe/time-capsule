@@ -32,18 +32,42 @@ class Photos
     }
 
     /**
-     * @return array{file: string, width: int, height: int}|null null when it isn't an image we can read
+     * Stores a letter's photos: every one is checked (fits()) before any is stored, and if one
+     * still can't be read, those already stored go again.
+     *
+     * @param list<UploadedFileInterface> $uploads
+     * @return list<array{file: string, width: int, height: int}>|null null when one isn't an image we can read
      */
-    public function store(UploadedFileInterface $upload, int $userId): ?array
+    public function storeAll(array $uploads, int $userId): ?array
     {
-        if ($upload->getError() !== UPLOAD_ERR_OK || $upload->getSize() > Settings::MAX_PHOTO_BYTES) {
-            return null;
+        foreach ($uploads as $upload) {
+            if (! $this->fits($upload)) {
+                return null;
+            }
         }
 
-        $bytes = (string) $upload->getStream();
-        if (! $this->fits($upload)) {
-            return null;
+        $stored = [];
+        foreach ($uploads as $upload) {
+            $photo = $this->store($upload, $userId);
+            if (! $photo) {
+                $this->forget(array_column($stored, 'file'));
+
+                return null;
+            }
+            $stored[] = $photo;
         }
+
+        return $stored;
+    }
+
+    /**
+     * One photo that fits(): re-encoded, encrypted, stored.
+     *
+     * @return array{file: string, width: int, height: int}|null null when it isn't an image we can read
+     */
+    private function store(UploadedFileInterface $upload, int $userId): ?array
+    {
+        $bytes = (string) $upload->getStream();
 
         try {
             $image = $this->images->read($bytes);
@@ -75,6 +99,8 @@ class Photos
         if ($upload->getError() !== UPLOAD_ERR_OK || $upload->getSize() > Settings::MAX_PHOTO_BYTES) {
             return false;
         }
+        // Reads the header only. Bytes that aren't an image give false (handled below) plus a PHP
+        // notice, which @ keeps out of the log: a stranger's bad upload isn't the forum's error.
         $size = @getimagesizefromstring((string) $upload->getStream());
         if (! $size || $size[0] < 1 || $size[1] < 1) {
             return false;

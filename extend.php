@@ -11,8 +11,8 @@
  * letters: no API resource, so no include can ever pull one in.
  *
  * The scheduler opens letters every minute (Opener: idempotent, safe to
- * overlap or rerun); the page opens any it shows that are due, for forums
- * whose scheduler isn't running.
+ * overlap or rerun). On a forum whose scheduler hasn't run in five minutes,
+ * the pages open any due letter they show; otherwise they only read.
  */
 
 use ErnestDefoe\TimeCapsule\Api;
@@ -54,13 +54,14 @@ return [
     (new Extend\Routes('api'))
         ->get('/time-capsule', 'time-capsule.index', Api\PageController::class)
         ->post('/time-capsule', 'time-capsule.seal', Api\SealController::class)
+        ->get('/time-capsule/mine', 'time-capsule.mine', Api\MineController::class)
         ->get('/time-capsule/{id:\d+}', 'time-capsule.show', Api\ShowController::class)
         ->delete('/time-capsule/{id:\d+}', 'time-capsule.delete', Api\DeleteController::class)
         ->get('/time-capsule/{id:\d+}/photos/{photo:\d+}', 'time-capsule.photo', Api\PhotoController::class)
-        ->post('/time-capsule/community', 'time-capsule.community.create', Api\CommunityController::class)
-        ->get('/time-capsule/community/{id:\d+}', 'time-capsule.community.show', Api\CommunityController::class)
-        ->patch('/time-capsule/community/{id:\d+}', 'time-capsule.community.update', Api\CommunityController::class)
-        ->delete('/time-capsule/community/{id:\d+}', 'time-capsule.community.delete', Api\CommunityController::class),
+        ->get('/time-capsule/community/{id:\d+}', 'time-capsule.community.show', Api\CommunityLettersController::class),
+
+    // The community capsule itself carries no letter text: an ordinary resource.
+    new Extend\ApiResource(Api\CommunityResource::class),
 
     (new Extend\Console())
         ->command(OpenCommand::class)

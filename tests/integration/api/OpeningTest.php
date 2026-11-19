@@ -54,6 +54,18 @@ class OpeningTest extends TestCase
         return $body['capsule']['id'];
     }
 
+    /** Starts or changes the community capsule through its JSON:API resource. */
+    private function community(string $method, ?int $id, ?int $as, array $attributes): array
+    {
+        $data = ['type' => 'time-capsule-communities', 'attributes' => $attributes];
+        if ($id) {
+            $data['id'] = (string) $id;
+        }
+        [$status, $body] = $this->json($method, '/api/time-capsule-communities'.($id ? '/'.$id : ''), $as, ['data' => $data]);
+
+        return [$status, isset($body['data']['id']) ? ['community' => ['id' => (int) $body['data']['id']]] : $body];
+    }
+
     private function due(int $id): void
     {
         $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute()]);
@@ -136,7 +148,7 @@ class OpeningTest extends TestCase
             }
         }));
 
-        [, $created] = $this->json('POST', '/api/time-capsule/community', 1, ['title' => 'All of us', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String(), 'notifyEveryone' => false]);
+        [, $created] = $this->community('POST', null, 1, ['title' => 'All of us', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String(), 'notifyEveryone' => false]);
         $this->seal(['community' => $created['community']['id']], 3);
         $bad = $this->seal(['envelope' => 'BOOM']);
         $good = $this->seal(['envelope' => 'fine']);
@@ -179,7 +191,7 @@ class OpeningTest extends TestCase
     #[Test]
     public function a_community_capsule_keeps_every_letter_sealed_then_opens_them_together()
     {
-        [$status, $created] = $this->json('POST', '/api/time-capsule/community', 1, [
+        [$status, $created] = $this->community('POST', null, 1, [
             'title' => 'Hopes for next year',
             'opensAt' => Carbon::now()->addDays(30)->toIso8601String(),
             'notifyEveryone' => false,
@@ -189,8 +201,8 @@ class OpeningTest extends TestCase
         $community = $created['community']['id'];
 
         // Only one sealed at a time; members can't start one.
-        $this->assertSame(422, $this->json('POST', '/api/time-capsule/community', 1, ['title' => 'Another', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
-        $this->assertSame(403, $this->json('POST', '/api/time-capsule/community', 2, ['title' => 'Mine', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
+        $this->assertSame(422, $this->community('POST', null, 1, ['title' => 'Another', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
+        $this->assertSame(403, $this->community('POST', null, 2, ['title' => 'Mine', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
 
         $first = $this->seal(['community' => $community], 2);
         $this->seal(['community' => $community], 3);
@@ -225,15 +237,15 @@ class OpeningTest extends TestCase
     public function a_community_capsule_with_letters_can_only_move_later()
     {
         $opens = Carbon::now()->addDays(30);
-        [, $created] = $this->json('POST', '/api/time-capsule/community', 1, ['title' => 'Next year', 'opensAt' => $opens->toIso8601String()]);
+        [, $created] = $this->community('POST', null, 1, ['title' => 'Next year', 'opensAt' => $opens->toIso8601String()]);
         $id = $created['community']['id'];
 
         // No letters yet: any day.
-        $this->assertSame(200, $this->json('PATCH', '/api/time-capsule/community/'.$id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(20)->toIso8601String()])[0]);
+        $this->assertSame(200, $this->community('PATCH', $id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(20)->toIso8601String()])[0]);
 
         $letter = $this->seal(['community' => $id]);
-        $this->assertSame(422, $this->json('PATCH', '/api/time-capsule/community/'.$id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(2)->toIso8601String()])[0]);
-        $this->assertSame(200, $this->json('PATCH', '/api/time-capsule/community/'.$id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
+        $this->assertSame(422, $this->community('PATCH', $id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(2)->toIso8601String()])[0]);
+        $this->assertSame(200, $this->community('PATCH', $id, 1, ['title' => 'Next year', 'opensAt' => Carbon::now()->addDays(40)->toIso8601String()])[0]);
 
         $this->opener()->run();
         $this->assertNull($this->database()->table('time_capsules')->where('id', $letter)->value('opened_at'));
@@ -243,7 +255,7 @@ class OpeningTest extends TestCase
     #[Test]
     public function a_community_capsule_can_notify_everyone_once()
     {
-        [, $created] = $this->json('POST', '/api/time-capsule/community', 1, [
+        [, $created] = $this->community('POST', null, 1, [
             'title' => 'Everyone',
             'opensAt' => Carbon::now()->addDays(30)->toIso8601String(),
             'notifyEveryone' => true,
@@ -267,4 +279,107 @@ class OpeningTest extends TestCase
         $this->assertSame(204, $this->json('DELETE', '/api/users/2', 1)[0]);
         $this->assertSame(0, $this->database()->table('time_capsules')->count());
     }
+
+    #[Test]
+    public function the_community_capsule_resource_checks_who_and_deletes_its_letters()
+    {
+        [, $created] = $this->community('POST', null, 1, ['title' => 'Going away', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String()]);
+        $id = $created['community']['id'];
+        $this->seal(['community' => $id], 2);
+
+        $this->assertSame(403, $this->community('PATCH', $id, 2, ['title' => 'Hijacked'])[0]);
+        $this->assertSame(403, $this->json('DELETE', '/api/time-capsule-communities/'.$id, 2)[0]);
+        $this->assertSame(422, $this->community('PATCH', $id, 1, ['opensAt' => Carbon::now()->subDay()->toIso8601String()])[0]);
+
+        $this->assertSame(204, $this->json('DELETE', '/api/time-capsule-communities/'.$id, 1)[0]);
+        $this->assertSame(0, $this->database()->table('time_capsules')->count());
+
+        // An opened one can't be changed.
+        [, $created] = $this->community('POST', null, 1, ['title' => 'Opened', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String()]);
+        $this->database()->table('time_capsule_communities')->update(['opened_at' => Carbon::now()]);
+        $this->assertSame(422, $this->community('PATCH', $created['community']['id'], 1, ['title' => 'Changed'])[0]);
+    }
+
+    #[Test]
+    public function a_community_letter_left_sealed_opens_on_the_next_run()
+    {
+        [, $created] = $this->community('POST', null, 1, ['title' => 'Late', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String(), 'notifyEveryone' => false]);
+        $letter = $this->seal(['community' => $created['community']['id']]);
+        // The capsule opened, but its letters didn't (a letter sealed in that moment, or a run that stopped).
+        $this->database()->table('time_capsule_communities')->update(['opens_at' => Carbon::now()->subMinute(), 'opened_at' => Carbon::now()]);
+
+        $this->opener()->run();
+
+        $this->assertNotNull($this->database()->table('time_capsules')->where('id', $letter)->value('opened_at'));
+    }
+
+    #[Test]
+    public function with_the_scheduler_running_viewing_a_page_changes_nothing()
+    {
+        $id = $this->seal();
+        $this->opener()->run();
+        $this->due($id);
+
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule', 2)[0]);
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule/'.$id, 2)[0]);
+        $this->assertNull($this->database()->table('time_capsules')->where('id', $id)->value('opened_at'));
+
+        $this->opener()->run();
+        $this->assertNotNull($this->database()->table('time_capsules')->where('id', $id)->value('opened_at'));
+    }
+
+    #[Test]
+    public function a_letters_discussion_shows_only_to_those_who_may_see_it()
+    {
+        $id = $this->seal(['visibility' => 'public', 'post' => true]);
+        $this->due($id);
+        $this->opener()->run();
+        $discussion = (int) $this->database()->table('time_capsules')->where('id', $id)->value('discussion_id');
+        $this->assertGreaterThan(0, $discussion);
+
+        $this->assertSame($discussion, $this->json('GET', '/api/time-capsule/'.$id, null)[1]['capsule']['discussion']['id']);
+
+        $this->database()->table('discussions')->where('id', $discussion)->update(['hidden_at' => Carbon::now()]);
+        $this->assertNull($this->json('GET', '/api/time-capsule/'.$id, null)[1]['capsule']['discussion']);
+        $this->assertNull($this->json('GET', '/api/time-capsule', null)[1]['recent'][0]['discussion']);
+    }
+
+    #[Test]
+    public function your_opened_letters_come_a_page_at_a_time()
+    {
+        $now = Carbon::now();
+        $rows = [];
+        for ($i = 0; $i < 31; $i++) {
+            $rows[] = ['user_id' => 2, 'sealed_body' => 'tc1:x', 'words' => 1, 'photo_count' => 0, 'opens_at' => $now, 'sealed_at' => $now, 'opened_at' => $now->copy()->subMinutes($i), 'notified_at' => $now, 'visibility' => 'private'];
+        }
+        $this->database()->table('time_capsules')->insert($rows);
+
+        [, $page] = $this->json('GET', '/api/time-capsule', 2);
+        $this->assertCount(30, $page['mine']);
+        $this->assertTrue($page['moreMine']);
+
+        $response = $this->send($this->request('GET', '/api/time-capsule/mine', ['authenticatedAs' => 2])->withQueryParams(['offset' => '30']));
+        $this->assertSame(200, $response->getStatusCode());
+        $more = json_decode((string) $response->getBody(), true);
+        $this->assertCount(1, $more['letters']);
+        $this->assertFalse($more['more']);
+        $this->assertSame(401, $this->json('GET', '/api/time-capsule/mine', null)[0]);
+    }
+
+    #[Test]
+    public function a_community_alert_skips_members_who_may_not_view_time_capsules()
+    {
+        $this->database()->table('group_permission')->where('permission', 'time-capsule.view')->delete();
+        $this->database()->table('group_permission')->insert(['group_id' => 4, 'permission' => 'time-capsule.view']);
+        $this->database()->table('group_user')->insert(['user_id' => 3, 'group_id' => 4]);
+
+        [, $created] = $this->community('POST', null, 1, ['title' => 'Staff only', 'opensAt' => Carbon::now()->addDays(30)->toIso8601String(), 'notifyEveryone' => true]);
+        $this->database()->table('time_capsule_communities')->where('id', $created['community']['id'])->update(['opens_at' => Carbon::now()->subMinute()]);
+        $this->opener()->run();
+
+        $this->assertSame(1, $this->notifications('timeCapsuleCommunityOpened', 1), 'admin');
+        $this->assertSame(1, $this->notifications('timeCapsuleCommunityOpened', 3), 'moderator');
+        $this->assertSame(0, $this->notifications('timeCapsuleCommunityOpened', 2), 'member without the permission');
+    }
 }
+

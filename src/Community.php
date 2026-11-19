@@ -4,9 +4,9 @@ namespace ErnestDefoe\TimeCapsule;
 
 use Carbon\Carbon;
 use Flarum\Database\AbstractModel;
+use Flarum\Discussion\Discussion;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A forum-wide capsule: members add letters, and they all open on one day.
@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property Carbon|null $notified_at
  * @property Carbon $created_at
  * @property User|null $user
+ * @property Discussion|null $discussion
  */
 class Community extends AbstractModel
 {
@@ -49,10 +50,10 @@ class Community extends AbstractModel
         return $this->belongsTo(User::class);
     }
 
-    /** @return HasMany<Capsule, $this> */
-    public function letters(): HasMany
+    /** @return BelongsTo<Discussion, $this> */
+    public function discussion(): BelongsTo
     {
-        return $this->hasMany(Capsule::class, 'community_id');
+        return $this->belongsTo(Discussion::class);
     }
 
     public function isOpen(): bool

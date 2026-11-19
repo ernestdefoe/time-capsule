@@ -6,7 +6,7 @@ import Icon from 'flarum/common/components/Icon';
 import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { call, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
+import { call, communityUrl, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
 import Countdown from './Countdown';
 import { OpenedCard, SealedCard } from './Cards';
 import LetterView from './LetterView';
@@ -20,18 +20,14 @@ import LetterView from './LetterView';
  * never sends a sealed letter's words, so there is nothing here to hide.
  */
 
-declare const flarum: any;
 export let PageStructure: any;
 export let IndexSidebar: any;
 
-/** Core page parts, loaded through the registry before the page draws. */
+/** Core page parts (lazy chunks of core's own), loaded before the page draws. */
 export async function loadCore(): Promise<void> {
-  const [structure, sidebar] = await Promise.all([
-    flarum.reg.asyncModuleImport('flarum/forum/components/PageStructure'),
-    flarum.reg.asyncModuleImport('flarum/forum/components/IndexSidebar'),
-  ]);
-  PageStructure = structure.default || structure;
-  IndexSidebar = sidebar.default || sidebar;
+  const [structure, sidebar] = await Promise.all([import('flarum/forum/components/PageStructure'), import('flarum/forum/components/IndexSidebar')]);
+  PageStructure = structure.default;
+  IndexSidebar = sidebar.default;
 }
 
 type Mode = 'index' | 'letter' | 'community';
@@ -44,6 +40,8 @@ export default class TimeCapsulePage extends Page {
   data: PageData | null = null;
   letter: Letter | null = null;
   community: { community: CommunityRow; letters: Letter[]; more: boolean } | null = null;
+  /** The letter forms' limits, from whichever page loaded. */
+  limits: PageData['limits'] | null = null;
   loadingMore = false;
 
   oninit(vnode: Mithril.Vnode<any, this>) {
@@ -68,10 +66,12 @@ export default class TimeCapsulePage extends Page {
         : this.mode === 'community'
           ? call<any>('GET', '/community/' + this.id, undefined, true).then((r) => {
               this.community = r;
+              this.limits = r.limits;
               app.setTitle(r.community.title);
             })
           : call<PageData>('GET', '', undefined, true).then((r) => {
               this.data = r;
+              this.limits = r.limits;
             });
 
     return request
@@ -155,6 +155,11 @@ export default class TimeCapsulePage extends Page {
               <Icon name="fas fa-envelope-open-text" /> {t('page.opened_mine_title')}
             </h3>
             <div className="TimeCapsuleGrid">{opened.map((letter) => OpenedCard({ letter }))}</div>
+            {data.moreMine && (
+              <Button className="Button TimeCapsuleLetters-more" loading={this.loadingMore} onclick={() => this.moreMine(opened.length)}>
+                {t('community.more')}
+              </Button>
+            )}
           </section>
         )}
 
@@ -247,10 +252,7 @@ export default class TimeCapsulePage extends Page {
             </Button>
           ) : (
             !app.session.user && (
-              <Button
-                className="Button Button--primary"
-                onclick={() => app.modal.show(() => flarum.reg.asyncModuleImport('flarum/forum/components/LogInModal'))}
-              >
+              <Button className="Button Button--primary" onclick={() => app.modal.show(() => import('flarum/forum/components/LogInModal'))}>
                 {t('page.log_in_to_write')}
               </Button>
             )
@@ -395,6 +397,20 @@ export default class TimeCapsulePage extends Page {
     );
   }
 
+  moreMine(offset: number) {
+    if (!this.data) return;
+    this.loadingMore = true;
+    call<{ letters: Letter[]; more: boolean }>('GET', `/mine?offset=${offset}`)
+      .then((r) => {
+        this.data!.mine.push(...r.letters);
+        this.data!.moreMine = r.more;
+      })
+      .finally(() => {
+        this.loadingMore = false;
+        m.redraw();
+      });
+  }
+
   more() {
     if (!this.community) return;
     this.loadingMore = true;
@@ -416,7 +432,7 @@ export default class TimeCapsulePage extends Page {
     app.modal.show(() => import('./SealModal'), {
       community: community || data?.community || null,
       toCommunity: !!community,
-      limits: data?.limits,
+      limits: this.limits!,
       canPost: data?.can.post ?? false,
       onsealed: (letter: Letter) => {
         if (this.data) {
@@ -440,7 +456,7 @@ export default class TimeCapsulePage extends Page {
   manage(community: CommunityRow | null) {
     app.modal.show(() => import('./CommunityModal'), {
       community,
-      maxYears: this.data?.limits.maxYears ?? 25,
+      maxYears: this.limits!.maxYears,
       onsave: () => this.load(),
     });
   }
@@ -466,7 +482,7 @@ export default class TimeCapsulePage extends Page {
 
   removeCommunity(c: CommunityRow) {
     if (!confirm(extractText(t('community.delete_confirm', { count: c.letters })))) return;
-    call('DELETE', '/community/' + c.id).then(() => {
+    app.request({ method: 'DELETE', url: communityUrl(c.id) }).then(() => {
       if (this.mode === 'community') m.route.set(app.route('time-capsule'));
       else this.load();
     });

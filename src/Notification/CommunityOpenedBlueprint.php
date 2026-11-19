@@ -13,10 +13,14 @@ use Flarum\User\User;
 /**
  * "The community time capsule '2027 hopes' is open": to every member (or
  * just its writers). The subject is the admin who started it.
+ *
+ * Sent in chunks of members by id (Opener): each chunk is its own blueprint,
+ * marked by the id it starts after, so syncing one chunk never touches the
+ * notifications of another, and a rerun of a chunk notifies nobody twice.
  */
 class CommunityOpenedBlueprint implements BlueprintInterface, AlertableInterface, MailableInterface
 {
-    public function __construct(public Community $community, public User $starter)
+    public function __construct(public Community $community, public User $starter, public int $after = 0)
     {
     }
 
@@ -32,7 +36,7 @@ class CommunityOpenedBlueprint implements BlueprintInterface, AlertableInterface
 
     public function getData(): mixed
     {
-        return ['community' => $this->community->id, 'title' => $this->community->title];
+        return ['community' => $this->community->id, 'title' => $this->community->title, 'after' => $this->after];
     }
 
     public static function getType(): string

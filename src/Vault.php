@@ -3,7 +3,6 @@
 namespace ErnestDefoe\TimeCapsule;
 
 use Flarum\Foundation\Config;
-use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Filesystem\Factory;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Psr\Log\LoggerInterface;
@@ -33,11 +32,13 @@ class Vault
     private const KEY_FILE = 'key';
 
     private ?string $key = null;
+    /** Set once the key turned out to be lost: later reads in this request skip the check and the log line. */
+    private ?KeyMissing $lost = null;
 
     public function __construct(
         private readonly Factory $filesystems,
         private readonly Config $config,
-        private readonly Cache $cache,
+        private readonly Locks $locks,
         private readonly LoggerInterface $log,
     ) {
     }
@@ -108,6 +109,9 @@ class Vault
 
     private function keyFromFile(): string
     {
+        if ($this->lost) {
+            throw $this->lost;
+        }
         $disk = $this->disk();
         if (! $disk->exists(self::KEY_FILE)) {
             $this->createKey($disk);
@@ -127,7 +131,7 @@ class Vault
 
         // Two first letters sealed at the same moment must not write two different keys: one process
         // writes it under a lock, and the other is asked to try again (never made to wait in a request).
-        $created = $this->cache->lock('time-capsule:key', 10)->get(function () use ($disk) {
+        $created = $this->locks->lock('key', 10)->get(function () use ($disk) {
             if (! $disk->exists(self::KEY_FILE)) {
                 $this->assertNoLetters();
                 if ($disk->put(self::KEY_FILE, base64_encode(sodium_crypto_aead_xchacha20poly1305_ietf_keygen())) !== true) {
@@ -148,7 +152,7 @@ class Vault
         if (Capsule::query()->exists()) {
             $this->log->critical('[time-capsule] The key file is missing from the '.self::DISK.' disk (storage/time-capsule/key), but there are sealed letters: they were sealed with that key and cannot be opened without it. Restore it from a backup. Sealing new letters is stopped until then.');
 
-            throw new KeyMissing('Time Capsule\'s key is missing: restore storage/time-capsule/key from a backup.');
+            throw $this->lost = new KeyMissing('Time Capsule\'s key is missing: restore storage/time-capsule/key from a backup.');
         }
     }
 }

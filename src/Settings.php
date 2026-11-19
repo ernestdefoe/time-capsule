@@ -9,7 +9,6 @@ final class Settings
     public const MODERATE = 'time-capsule.moderate';
     public const COMMUNITY = 'time-capsule.community';
 
-    public const NAV = 'time-capsule.nav';
     public const TAG = 'time-capsule.tag';
     public const MAX_YEARS = 'time-capsule.max_years';
     public const FOUNDED = 'time-capsule.founded';

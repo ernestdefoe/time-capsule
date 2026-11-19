@@ -2,18 +2,12 @@ import app from 'flarum/forum/app';
 import Extend from 'flarum/common/extenders';
 import Notification from 'flarum/forum/components/Notification';
 import type Mithril from 'mithril';
+import { longDate, t } from './util';
 
 /*
  * The declarative half of the forum: the routes (the page is a chunk fetched when someone opens
  * /time-capsule) and the two notification components.
  */
-
-export const t = (key: string, params: Record<string, any> = {}) => app.translator.trans(`ernestdefoe-time-capsule.forum.${key}`, params);
-
-const date = (iso?: string) =>
-  iso
-    ? new Intl.DateTimeFormat(app.translator.getLocale() || undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(iso))
-    : '';
 
 class CapsuleOpenedNotification extends Notification {
   icon() {
@@ -25,7 +19,8 @@ class CapsuleOpenedNotification extends Notification {
   }
 
   content(): Mithril.Children {
-    return t('notification.opened', { date: date((this.attrs.notification as any).content()?.sealed) });
+    const sealed = (this.attrs.notification as any).content()?.sealed;
+    return t('notification.opened', { date: sealed ? longDate(sealed) : '' });
   }
 
   excerpt(): Mithril.Children {

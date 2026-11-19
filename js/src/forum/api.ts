@@ -1,5 +1,8 @@
 import app from 'flarum/forum/app';
 import extractText from 'flarum/common/utils/extractText';
+import { t } from './util';
+
+export { longDate, t } from './util';
 
 export interface Person {
   id: number;
@@ -57,6 +60,8 @@ export interface CommunityRow {
 
 export interface PageData {
   mine: Letter[];
+  /** More of your opened letters than the first page (GET /time-capsule/mine?offset=). */
+  moreMine: boolean;
   recent: Letter[];
   community: CommunityRow | null;
   opened: CommunityRow[];
@@ -64,8 +69,6 @@ export interface PageData {
   can: { create: boolean; community: boolean; post: boolean };
   limits: { maxYears: number; maxPhotos: number; maxLength: number; minHours: number; founded: string };
 }
-
-export const t = (key: string, params: Record<string, any> = {}) => app.translator.trans(`ernestdefoe-time-capsule.forum.${key}`, params);
 
 /** The sentence for an error answer from our endpoints. */
 export function errorText(error: any): string {
@@ -91,10 +94,9 @@ export function call<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: strin
   });
 }
 
-const locale = () => app.translator.getLocale() || undefined;
-
-export function longDate(iso: string): string {
-  return new Intl.DateTimeFormat(locale(), { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(iso));
+/** The community capsule's JSON:API resource (starting, changing, deleting it). */
+export function communityUrl(id?: number): string {
+  return app.forum.attribute<string>('apiUrl') + '/time-capsule-communities' + (id ? '/' + id : '');
 }
 
 /** Whole calendar years, months and days from a to b (b later), the way people count them. */

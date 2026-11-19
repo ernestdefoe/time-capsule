@@ -7,6 +7,7 @@ use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
 use ErnestDefoe\TimeCapsule\KeyBusy;
 use ErnestDefoe\TimeCapsule\KeyMissing;
+use ErnestDefoe\TimeCapsule\Locks;
 use ErnestDefoe\TimeCapsule\Photo;
 use ErnestDefoe\TimeCapsule\Photos;
 use ErnestDefoe\TimeCapsule\Present;
@@ -14,6 +15,7 @@ use ErnestDefoe\TimeCapsule\Settings;
 use ErnestDefoe\TimeCapsule\Vault;
 use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Flarum\User\User;
 use Illuminate\Database\ConnectionInterface;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -28,7 +30,7 @@ use Throwable;
  *   post?, peek?, community? (a community capsule's id), photos[]?
  *
  * Seals a letter: encrypted before it reaches the database, photos
- * re-encoded and encrypted into storage/. The answer is the sealed card, not
+ * re-encoded and encrypted onto the extension's private disk. The answer is the sealed card, not
  * the letter.
  */
 class SealController implements RequestHandlerInterface
@@ -39,6 +41,7 @@ class SealController implements RequestHandlerInterface
         private readonly Present $present,
         private readonly SettingsRepositoryInterface $settings,
         private readonly ConnectionInterface $db,
+        private readonly Locks $locks,
     ) {
     }
 
@@ -57,33 +60,50 @@ class SealController implements RequestHandlerInterface
 
         $when = $this->when($body);
         $uploads = $this->uploads($request);
-        $refusal = match (true) {
-            $when instanceof ResponseInterface => $when,
-            $uploads instanceof ResponseInterface => $uploads,
-            default => $this->limits($actor->id),
-        };
-        if ($refusal) {
-            return $refusal;
+        if ($when instanceof ResponseInterface) {
+            return $when;
+        }
+        if ($uploads instanceof ResponseInterface) {
+            return $uploads;
         }
         [$community, $opensAt] = $when;
 
+        // One letter at a time per member, so two sent at once can't both slip under the limits.
+        $lock = $this->locks->lock('seal:'.$actor->id, 30);
+        if (! $lock->get()) {
+            return Errors::make(429, 'time_capsule_slow_down');
+        }
+
         try {
-            $sealed = $this->vault->seal($text, 'capsule:'.$actor->id);
+            $capsule = $this->letter($actor->id, $body, $community, $opensAt);
+            $capsule->envelope = $envelope !== '' ? $envelope : null;
+            $capsule->words = Input::words($text);
+
+            return $this->limits($actor->id) ?? $this->seal($capsule, $text, $uploads, $actor);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Encrypts the letter and its photos and saves them.
+     *
+     * @param list<UploadedFileInterface> $uploads
+     */
+    private function seal(Capsule $capsule, string $text, array $uploads, User $actor): ResponseInterface
+    {
+        try {
+            $capsule->sealed_body = $this->vault->seal($text, $capsule->context());
         } catch (KeyMissing) {
             return Errors::make(503, 'time_capsule_key_missing');
         } catch (KeyBusy) {
             return Errors::make(503, 'time_capsule_busy');
         }
 
-        $stored = $this->storePhotos($uploads, $actor->id);
+        $stored = $this->photos->storeAll($uploads, $actor->id);
         if ($stored === null) {
             return Errors::make(422, 'time_capsule_bad_photo');
         }
-
-        $capsule = $this->letter($actor->id, $body, $community, $opensAt);
-        $capsule->envelope = $envelope !== '' ? $envelope : null;
-        $capsule->sealed_body = $sealed;
-        $capsule->words = Input::words($text);
         $capsule->photo_count = count($stored);
 
         $this->save($capsule, $stored);
@@ -133,7 +153,7 @@ class SealController implements RequestHandlerInterface
     }
 
     /**
-     * The photos sent, every one checked before any is stored.
+     * The photos sent (Photos::storeAll() checks each before storing any).
      *
      * @return list<UploadedFileInterface>|ResponseInterface
      */
@@ -145,11 +165,6 @@ class SealController implements RequestHandlerInterface
         ));
         if (count($uploads) > Settings::MAX_PHOTOS) {
             return Errors::make(422, 'time_capsule_too_many_photos');
-        }
-        foreach ($uploads as $upload) {
-            if (! $this->photos->fits($upload)) {
-                return Errors::make(422, 'time_capsule_bad_photo');
-            }
         }
 
         return $uploads;
@@ -167,28 +182,6 @@ class SealController implements RequestHandlerInterface
         }
 
         return null;
-    }
-
-    /**
-     * Re-encodes and encrypts each photo; null (and nothing left behind) if one can't be read.
-     *
-     * @param list<UploadedFileInterface> $uploads
-     * @return list<array{file: string, width: int, height: int}>|null
-     */
-    private function storePhotos(array $uploads, int $userId): ?array
-    {
-        $stored = [];
-        foreach ($uploads as $upload) {
-            $photo = $this->photos->store($upload, $userId);
-            if (! $photo) {
-                $this->photos->forget(array_column($stored, 'file'));
-
-                return null;
-            }
-            $stored[] = $photo;
-        }
-
-        return $stored;
     }
 
     /**

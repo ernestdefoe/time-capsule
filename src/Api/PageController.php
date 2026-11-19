@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
 use ErnestDefoe\TimeCapsule\DiscussionTags;
+use ErnestDefoe\TimeCapsule\OpenedLetters;
 use ErnestDefoe\TimeCapsule\Opener;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
@@ -22,17 +23,17 @@ use Psr\Http\Server\RequestHandlerInterface;
  * GET /api/time-capsule: everything the /time-capsule page shows in one
  * answer: your letters (sealed ones as cards only), recently opened public
  * letters, the community capsule's countdown, recently opened community
- * capsules, and forum-wide counts. A letter due but not yet opened (no
- * scheduler run since) is opened here, through the same idempotent Opener.
+ * capsules, and forum-wide counts. On a forum whose scheduler isn't running,
+ * a due letter is opened here, through the same idempotent Opener.
  */
 class PageController implements RequestHandlerInterface
 {
-    private const MINE = 200;
     private const RECENT = 12;
 
     public function __construct(
         private readonly Present $present,
         private readonly Opener $opener,
+        private readonly OpenedLetters $mine,
         private readonly SettingsRepositoryInterface $settings,
         private readonly DiscussionTags $tags,
     ) {
@@ -44,35 +45,41 @@ class PageController implements RequestHandlerInterface
         $actor->assertCan(Settings::VIEW);
 
         $community = Community::query()->whereNull('opened_at')->orderBy('opens_at')->first();
-        if ($community && $this->opener->openCommunity($community)) {
+        if ($community && $this->opener->openCommunityOnView($community)) {
             $community = null;
         }
 
-        $mine = $actor->isGuest() ? new Collection() : Capsule::query()->where('user_id', $actor->id)
-            ->with(['photos', 'discussion'])->orderByDesc('sealed_at')->limit(self::MINE)->get();
-        $mine->each(function (Capsule $capsule) use ($actor) {
+        // Sealed letters are capped (Settings::MAX_SEALED), so they all come; opened ones come a page
+        // at a time (Api\MineController serves the rest).
+        $sealed = $actor->isGuest() ? new Collection() : Capsule::query()->where('user_id', $actor->id)->whereNull('opened_at')
+            ->with(Present::with($actor, false))->orderBy('opens_at')->limit(Settings::MAX_SEALED)->get();
+        $sealed->each(function (Capsule $capsule) use ($actor) {
             $capsule->setRelation('user', $actor);
-            $this->opener->open($capsule);
+            $this->opener->openOnView($capsule);
         });
+        [$opened, $moreMine] = $actor->isGuest() ? [new Collection(), false] : $this->mine->page($actor, 0);
+        $mine = $sealed->reject(fn (Capsule $c) => $c->isOpen())->concat($opened);
 
         $recent = Capsule::query()->whereNotNull('opened_at')->whereNull('community_id')->where('visibility', Capsule::PUBLIC)
-            ->with(['user', 'photos', 'discussion'])->orderByDesc('opened_at')->limit(self::RECENT)->get();
+            ->with(Present::with($actor))->orderByDesc('opened_at')->limit(self::RECENT)->get();
 
-        $opened = Community::query()->whereNotNull('opened_at')->orderByDesc('opened_at')->limit(3)->get();
-        $counts = $this->counts($opened->modelKeys(), $community, $actor);
+        $communities = Community::query()->whereNotNull('opened_at')->with(['discussion' => Present::visibleDiscussion($actor)])
+            ->orderByDesc('opened_at')->limit(3)->get();
+        $counts = $this->counts($communities->modelKeys(), $community, $actor);
 
         return new JsonResponse([
             'mine' => $mine->map(fn (Capsule $c) => $this->present->capsule($c, $actor))->values(),
             'recent' => $recent->map(fn (Capsule $c) => $this->present->capsule($c, $actor))->values(),
             'community' => $community ? $this->present->community($community, $actor, $counts[$community->id] ?? []) : null,
-            'opened' => $opened->map(fn (Community $c) => $this->present->community($c, $actor, $counts[$c->id] ?? []))->values(),
+            'moreMine' => $moreMine,
+            'opened' => $communities->map(fn (Community $c) => $this->present->community($c, $actor, $counts[$c->id] ?? []))->values(),
             'stats' => $this->stats(),
             'can' => [
                 'create' => $actor->can(Settings::CREATE),
                 'community' => $actor->can(Settings::COMMUNITY),
                 'post' => $this->canPost($actor),
             ],
-            'limits' => $this->limits(),
+            'limits' => Input::limits($this->settings),
         ]);
     }
 
@@ -92,18 +99,6 @@ class PageController implements RequestHandlerInterface
             'sealed' => (int) ($stats->sealed ?? 0),
             'opened' => (int) ($stats->opened ?? 0),
             'nextOpen' => $stats?->next_open ? Carbon::parse($stats->next_open, 'UTC')->toIso8601String() : null,
-        ];
-    }
-
-    /** @return array{maxYears: int, maxPhotos: int, maxLength: int, minHours: int, founded: string} */
-    private function limits(): array
-    {
-        return [
-            'maxYears' => Input::maxYears($this->settings),
-            'maxPhotos' => Settings::MAX_PHOTOS,
-            'maxLength' => Settings::MAX_LENGTH,
-            'minHours' => Settings::MIN_HOURS,
-            'founded' => (string) $this->settings->get(Settings::FOUNDED),
         ];
     }
 
