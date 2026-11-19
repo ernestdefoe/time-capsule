@@ -36,3 +36,10 @@ The 9 plain letter endpoints were a pre-floxum watch item across 3+ files. Make 
    - anything that could expose a sealed letter's text: scope, field visibility, the Index query, eager loads.
 3. Showcase seed: no change needed; it uses Vault and Photos directly.
 4. Send the range to the Command Center, then release 1.1.0.
+
+## Why pushes and releases start no workflows on this repo (investigated 2026-11-19)
+- The workflows are all `active` (not disabled for inactivity), Actions is enabled with all actions allowed, workflow permissions match Kiosk's, there are no rulesets, and the `on:` blocks are identical to Kiosk's. No commit carries a skip-ci marker.
+- GitHub does receive the pushes: the Packagist webhook got deliveries at 17:25, 18:05 and 18:34 UTC. But `actions/runs?event=push` and `?event=release` are 0 for the repo's whole life. `workflow_dispatch` works.
+- Only this repo is affected. Kiosk and the six other repos created on 2026-11-10 (secret-santa, garage, hype-market, forum-pet, mural, slow-mail) all have push runs.
+- Tried: every workflow disabled and re-enabled (`gh workflow disable/enable`), then this push as the test. Result is in the next note.
+- Until it's fixed: run CI by hand (`gh workflow run ci.yml / backend.yml / draft-release.yml`) and the announcer with `gh workflow run publish-to-flarum.yml -f tag_name=X`.
