@@ -70,7 +70,7 @@ class Present
         $row['body'] = $full ? $body : self::excerpt((string) $body);
         $row['truncated'] = ! $full && $body !== null && mb_strlen($body) > self::EXCERPT;
         $row['photos'] = $capsule->relationLoaded('photos') ? $capsule->photos->map(fn (Photo $p) => [
-            'url' => $this->url->to('api')->path('time-capsule/'.$capsule->id.'/photos/'.$p->id),
+            'url' => $this->url->to('api')->path('time-capsule-letters/'.$capsule->id.'/photos/'.$p->id),
             'width' => $p->width,
             'height' => $p->height,
         ])->values()->all() : [];

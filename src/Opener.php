@@ -5,9 +5,7 @@ namespace ErnestDefoe\TimeCapsule;
 use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Notification\CapsuleOpenedBlueprint;
 use ErnestDefoe\TimeCapsule\Notification\CommunityOpenedBlueprint;
-use Flarum\Api\JsonApi;
-use Flarum\Api\Resource\DiscussionResource;
-use Flarum\Discussion\Discussion;
+use Flarum\Api\Client;
 use Flarum\Group\Group;
 use Flarum\Group\Permission;
 use Flarum\Http\UrlGenerator;
@@ -46,7 +44,7 @@ class Opener
     public function __construct(
         private readonly Vault $vault,
         private readonly NotificationSyncer $notifications,
-        private readonly JsonApi $api,
+        private readonly Client $api,
         private readonly DiscussionTags $tags,
         private readonly TranslatorInterface $translator,
         private readonly UrlGenerator $url,
@@ -88,7 +86,7 @@ class Opener
     }
 
     /**
-     * What a viewer's page found due (POST /api/time-capsule/open, sent by the page when it shows
+     * What a viewer's page found due (POST /api/time-capsule-letters/open, sent by the page when it shows
      * a letter or capsule whose day has come): their own due letters and any due community
      * capsule. The scheduler opens the same within a minute; this is for the moment between, and
      * for forums whose scheduler isn't running. Page views themselves never write.
@@ -311,11 +309,10 @@ class Opener
         }
 
         try {
-            /** @var Discussion $discussion */
-            $discussion = $this->api->forResource(DiscussionResource::class)
-                ->forEndpoint('create')
-                ->process(['data' => $data], [], ['actor' => $author]);
-            $model::query()->whereKey($model->id)->update(['discussion_id' => $discussion->id]);
+            // Through Flarum's API as the writer: the same checks and events as starting it by hand.
+            $response = $this->api->withActor($author)->withoutErrorHandling()->withBody(['data' => $data])->post('/discussions');
+            $id = (int) (json_decode((string) $response->getBody(), true)['data']['id'] ?? 0);
+            $model::query()->whereKey($model->id)->update(['discussion_id' => $id ?: null]);
         } catch (Throwable $e) {
             $this->log->warning('[time-capsule] '.class_basename($model).' '.$model->id.' could not be posted: '.$e->getMessage());
             // Released for the next run, up to MAX_POST_ATTEMPTS.

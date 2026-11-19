@@ -7,7 +7,7 @@ import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
 import Community from '../models/Community';
-import { call, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
+import { call, duration, errorText, letterOf, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
 import Countdown from './Countdown';
 import { OpenedCard, SealedCard } from './Cards';
 import LetterView from './LetterView';
@@ -62,9 +62,9 @@ export default class TimeCapsulePage extends Page {
     this.loading = true;
     const request =
       this.mode === 'letter'
-        ? call<{ capsule: Letter }>('GET', '/' + this.id, undefined, true).then((r) => {
-            this.letter = r.capsule;
-            if (r.capsule.envelope) app.setTitle(r.capsule.envelope);
+        ? call<{ data: any }>('GET', '/' + this.id, undefined, true).then((r) => {
+            this.letter = letterOf(r.data);
+            if (this.letter.envelope) app.setTitle(this.letter.envelope);
           })
         : this.mode === 'community'
           ? call<any>('GET', '/community/' + this.id, undefined, true).then((r) => {
@@ -72,7 +72,7 @@ export default class TimeCapsulePage extends Page {
               this.limits = r.limits;
               app.setTitle(r.community.title);
             })
-          : call<PageData>('GET', '', undefined, true).then((r) => {
+          : call<PageData>('GET', '/page', undefined, true).then((r) => {
               this.data = r;
               this.limits = r.limits;
             });
@@ -427,10 +427,10 @@ export default class TimeCapsulePage extends Page {
   moreMine(offset: number) {
     if (!this.data) return;
     this.loadingMore = true;
-    call<{ letters: Letter[]; more: boolean }>('GET', `/mine?offset=${offset}`)
+    call<{ data: any[]; links?: { next?: string } }>('GET', `?page[offset]=${offset}`)
       .then((r) => {
-        this.data!.mine.push(...r.letters);
-        this.data!.moreMine = r.more;
+        this.data!.mine.push(...r.data.map(letterOf));
+        this.data!.moreMine = !!r.links?.next;
       })
       .finally(() => {
         this.loadingMore = false;

@@ -1,6 +1,9 @@
 <?php
 
-namespace ErnestDefoe\TimeCapsule\Api;
+namespace ErnestDefoe\TimeCapsule\Api\Action;
+
+use ErnestDefoe\TimeCapsule\Api\Errors;
+use ErnestDefoe\TimeCapsule\Api\Input;
 
 use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Capsule;
@@ -13,19 +16,18 @@ use ErnestDefoe\TimeCapsule\Photos;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
 use ErnestDefoe\TimeCapsule\Vault;
-use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Illuminate\Database\ConnectionInterface;
 use Laminas\Diactoros\Response\JsonResponse;
+use Flarum\Api\Context;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\UploadedFileInterface;
-use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 /**
- * POST /api/time-capsule   (multipart when there are photos)
+ * POST /api/time-capsule-letters/seal   (multipart when there are photos)
  *   body, envelope?, opensAt (ISO 8601 with offset), visibility (private|public),
  *   post?, peek?, community? (a community capsule's id), photos[]?
  *
@@ -33,7 +35,7 @@ use Throwable;
  * re-encoded and encrypted onto the extension's private disk. The answer is the sealed card, not
  * the letter.
  */
-class SealController implements RequestHandlerInterface
+class Seal
 {
     public function __construct(
         private readonly Vault $vault,
@@ -45,11 +47,10 @@ class SealController implements RequestHandlerInterface
     ) {
     }
 
-    public function handle(ServerRequestInterface $request): ResponseInterface
+    public function __invoke(Context $context): ResponseInterface
     {
-        $actor = RequestUtil::getActor($request);
-        $actor->assertRegistered();
-        $actor->assertCan(Settings::CREATE);
+        $request = $context->request;
+        $actor = $context->getActor();
 
         $body = (array) $request->getParsedBody();
         $text = Input::text($body, 'body');

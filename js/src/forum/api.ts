@@ -81,10 +81,15 @@ export function errorText(error: any): string {
   return extractText(t('errors.generic'));
 }
 
+/** A letter from the letters resource's JSON:API answer, as the page's rows have it. */
+export function letterOf(resource: { id: string; attributes: Record<string, any> }): Letter {
+  return { ...resource.attributes, id: Number(resource.id) } as Letter;
+}
+
 export function call<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: Record<string, any> | FormData, quiet = false): Promise<T> {
   return app.request<T>({
     method,
-    url: app.forum.attribute<string>('apiUrl') + '/time-capsule' + path,
+    url: app.forum.attribute<string>('apiUrl') + '/time-capsule-letters' + path,
     body,
     serialize: body instanceof FormData ? (raw: any) => raw : undefined,
     errorHandler: (error: any) => {

@@ -35,21 +35,26 @@ class OpeningTest extends TestCase
         ]);
     }
 
+    /** A JSON:API letter (Show) also comes back as `capsule`, the page's row shape. */
     private function json(string $method, string $path, ?int $as, array $json = []): array
     {
         $response = $this->send($this->request($method, $path, array_filter(['authenticatedAs' => $as, 'json' => $json ?: null])));
+        $body = json_decode((string) $response->getBody(), true);
+        if (($body['data']['type'] ?? null) === 'time-capsule-letters') {
+            $body['capsule'] = ['id' => (int) $body['data']['id']] + $body['data']['attributes'];
+        }
 
-        return [$response->getStatusCode(), json_decode((string) $response->getBody(), true)];
+        return [$response->getStatusCode(), $body];
     }
 
     private function seal(array $fields = [], int $as = 2): int
     {
-        [$status, $body] = $this->json('POST', '/api/time-capsule', $as, $fields + [
+        [$status, $body] = $this->json('POST', '/api/time-capsule-letters/seal', $as, $fields + [
             'body' => 'Note to self: '.self::MARKER,
             'opensAt' => Carbon::now()->addDays(3)->toIso8601String(),
             'visibility' => 'private',
         ]);
-        $this->assertSame(201, $status);
+        $this->assertSame(201, $status, json_encode($body));
 
         return $body['capsule']['id'];
     }
@@ -162,7 +167,7 @@ class OpeningTest extends TestCase
         $this->assertSame(1, $this->notifications('timeCapsuleCommunityOpened', 3));
 
         // And the writer's page, which opens letters too, still loads.
-        $this->assertSame(200, $this->json('GET', '/api/time-capsule', 2)[0]);
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule-letters/page', 2)[0]);
     }
 
     #[Test]
@@ -208,23 +213,23 @@ class OpeningTest extends TestCase
         $this->seal(['community' => $community], 3);
 
         foreach ([null, 1, 2, 3, 4] as $as) {
-            [$status, $body] = $this->json('GET', '/api/time-capsule/community/'.$community, $as);
+            [$status, $body] = $this->json('GET', '/api/time-capsule-letters/community/'.$community, $as);
             $this->assertSame(200, $status);
             $this->assertStringNotContainsString(self::MARKER, json_encode($body));
             $this->assertSame(2, $body['community']['letters']);
-            [, $page] = $this->json('GET', '/api/time-capsule', $as);
+            [, $page] = $this->json('GET', '/api/time-capsule-letters/page', $as);
             $this->assertStringNotContainsString(self::MARKER, json_encode($page));
         }
-        $this->assertSame(404, $this->json('GET', '/api/time-capsule/'.$first, 3)[0]);
+        $this->assertSame(404, $this->json('GET', '/api/time-capsule-letters/'.$first, 3)[0]);
 
         $this->database()->table('time_capsule_communities')->where('id', $community)->update(['opens_at' => Carbon::now()->subMinute()]);
         $this->opener()->run();
         $this->opener()->run();
 
-        [, $body] = $this->json('GET', '/api/time-capsule/community/'.$community, 4);
+        [, $body] = $this->json('GET', '/api/time-capsule-letters/community/'.$community, 4);
         $this->assertCount(2, $body['letters']);
         $this->assertStringContainsString(self::MARKER, $body['letters'][0]['body']);
-        $this->assertSame(200, $this->json('GET', '/api/time-capsule/'.$first, null)[0]);
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule-letters/'.$first, null)[0]);
 
         // The writers, once each; not the member who wrote nothing.
         $this->assertSame(1, $this->notifications('timeCapsuleCommunityOpened', 2));
@@ -328,12 +333,12 @@ class OpeningTest extends TestCase
         $this->due($mine);
         $this->due($theirs);
 
-        $this->assertSame(200, $this->json('GET', '/api/time-capsule', 2)[0]);
-        $this->assertSame(200, $this->json('GET', '/api/time-capsule/'.$mine, 2)[0]);
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule-letters/page', 2)[0]);
+        $this->assertSame(200, $this->json('GET', '/api/time-capsule-letters/'.$mine, 2)[0]);
         $this->assertNull($this->database()->table('time_capsules')->where('id', $mine)->value('opened_at'));
 
         // The page's open request opens the viewer's own due letters, never anyone else's.
-        [$status, $body] = $this->json('POST', '/api/time-capsule/open', 2);
+        [$status, $body] = $this->json('POST', '/api/time-capsule-letters/open', 2);
         $this->assertSame(200, $status);
         $this->assertSame(1, $body['opened']);
         $this->assertNotNull($this->database()->table('time_capsules')->where('id', $mine)->value('opened_at'));
@@ -341,7 +346,7 @@ class OpeningTest extends TestCase
         $this->assertSame(1, $this->notifications('timeCapsuleOpened', 2));
 
         // Again: nothing more opens, nobody is notified twice.
-        $this->assertSame(0, $this->json('POST', '/api/time-capsule/open', 2)[1]['opened']);
+        $this->assertSame(0, $this->json('POST', '/api/time-capsule-letters/open', 2)[1]['opened']);
         $this->assertSame(1, $this->notifications('timeCapsuleOpened', 2));
     }
 
@@ -354,11 +359,11 @@ class OpeningTest extends TestCase
         $discussion = (int) $this->database()->table('time_capsules')->where('id', $id)->value('discussion_id');
         $this->assertGreaterThan(0, $discussion);
 
-        $this->assertSame($discussion, $this->json('GET', '/api/time-capsule/'.$id, null)[1]['capsule']['discussion']['id']);
+        $this->assertSame($discussion, $this->json('GET', '/api/time-capsule-letters/'.$id, null)[1]['capsule']['discussion']['id']);
 
         $this->database()->table('discussions')->where('id', $discussion)->update(['hidden_at' => Carbon::now()]);
-        $this->assertNull($this->json('GET', '/api/time-capsule/'.$id, null)[1]['capsule']['discussion']);
-        $this->assertNull($this->json('GET', '/api/time-capsule', null)[1]['recent'][0]['discussion']);
+        $this->assertNull($this->json('GET', '/api/time-capsule-letters/'.$id, null)[1]['capsule']['discussion']);
+        $this->assertNull($this->json('GET', '/api/time-capsule-letters/page', null)[1]['recent'][0]['discussion']);
     }
 
     #[Test]
@@ -371,16 +376,16 @@ class OpeningTest extends TestCase
         }
         $this->database()->table('time_capsules')->insert($rows);
 
-        [, $page] = $this->json('GET', '/api/time-capsule', 2);
+        [, $page] = $this->json('GET', '/api/time-capsule-letters/page', 2);
         $this->assertCount(30, $page['mine']);
         $this->assertTrue($page['moreMine']);
 
-        $response = $this->send($this->request('GET', '/api/time-capsule/mine', ['authenticatedAs' => 2])->withQueryParams(['offset' => '30']));
+        // The rest come from the letters resource's Index.
+        $response = $this->send($this->request('GET', '/api/time-capsule-letters', ['authenticatedAs' => 2])->withQueryParams(['page' => ['offset' => '30']]));
         $this->assertSame(200, $response->getStatusCode());
         $more = json_decode((string) $response->getBody(), true);
-        $this->assertCount(1, $more['letters']);
-        $this->assertFalse($more['more']);
-        $this->assertSame(401, $this->json('GET', '/api/time-capsule/mine', null)[0]);
+        $this->assertCount(1, $more['data']);
+        $this->assertArrayNotHasKey('next', $more['links'] ?? []);
     }
 
     #[Test]

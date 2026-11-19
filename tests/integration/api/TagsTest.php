@@ -31,7 +31,7 @@ class TagsTest extends TestCase
 
     private function sealAndOpen(): int
     {
-        $response = $this->send($this->request('POST', '/api/time-capsule', ['authenticatedAs' => 2, 'json' => [
+        $response = $this->send($this->request('POST', '/api/time-capsule-letters/seal', ['authenticatedAs' => 2, 'json' => [
             'body' => 'A letter for the forum.',
             'opensAt' => Carbon::now()->addDays(3)->toIso8601String(),
             'visibility' => 'public',

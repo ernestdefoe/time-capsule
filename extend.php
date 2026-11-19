@@ -5,14 +5,15 @@
  *
  * A letter is encrypted before it reaches the database (Vault: libsodium,
  * key outside the database), its photos re-encoded and encrypted into
- * storage/. Until its day nobody reads it, admins included; the writer only
+ * the extension's private disk. Until its day nobody reads it, admins included; the writer only
  * if they kept a key. Access is the one gate and Present the one place a
- * letter is decrypted for output, and only these plain endpoints serve
- * letters: no API resource, so no include can ever pull one in.
+ * letter is decrypted for output. Letters are one API resource
+ * (time-capsule-letters) whose text is visible only when it may be read, and
+ * no other resource has a relationship to it, so no include can reach one.
  *
  * The scheduler opens letters every minute (Opener: idempotent, safe to
  * overlap or rerun). GET requests only read: a page that shows a due letter
- * asks POST /api/time-capsule/open, which opens the viewer's own due letters
+ * asks POST /api/time-capsule-letters/open, which opens the viewer's own due letters
  * and any due community capsule (forums without a running scheduler still
  * open letters).
  */
@@ -53,16 +54,8 @@ return [
     (new Extend\View())
         ->namespace('ernestdefoe-time-capsule', __DIR__.'/views'),
 
-    (new Extend\Routes('api'))
-        ->get('/time-capsule', 'time-capsule.index', Api\PageController::class)
-        ->post('/time-capsule', 'time-capsule.seal', Api\SealController::class)
-        ->get('/time-capsule/mine', 'time-capsule.mine', Api\MineController::class)
-        ->post('/time-capsule/open', 'time-capsule.open', Api\OpenController::class)
-        ->get('/time-capsule/{id:\d+}', 'time-capsule.show', Api\ShowController::class)
-        ->post('/time-capsule/{id:\d+}/read', 'time-capsule.read', Api\ReadController::class)
-        ->delete('/time-capsule/{id:\d+}', 'time-capsule.delete', Api\DeleteController::class)
-        ->get('/time-capsule/{id:\d+}/photos/{photo:\d+}', 'time-capsule.photo', Api\PhotoController::class)
-        ->get('/time-capsule/community/{id:\d+}', 'time-capsule.community.show', Api\CommunityLettersController::class),
+    // Every letter endpoint: one resource with no relationship pointing at it (see LetterResource).
+    new Extend\ApiResource(Api\LetterResource::class),
 
     // The community capsule itself carries no letter text: an ordinary resource.
     new Extend\ApiResource(Api\CommunityResource::class),

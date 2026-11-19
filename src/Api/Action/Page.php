@@ -1,6 +1,9 @@
 <?php
 
-namespace ErnestDefoe\TimeCapsule\Api;
+namespace ErnestDefoe\TimeCapsule\Api\Action;
+
+use ErnestDefoe\TimeCapsule\Api\Errors;
+use ErnestDefoe\TimeCapsule\Api\Input;
 
 use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Capsule;
@@ -9,23 +12,22 @@ use ErnestDefoe\TimeCapsule\DiscussionTags;
 use ErnestDefoe\TimeCapsule\OpenedLetters;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
-use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Illuminate\Support\Collection;
 use Laminas\Diactoros\Response\JsonResponse;
+use Flarum\Api\Context;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * GET /api/time-capsule: everything the /time-capsule page shows in one
+ * GET /api/time-capsule-letters/page: everything the /time-capsule page shows in one
  * answer: your letters (sealed ones as cards only), recently opened public
  * letters, the community capsule's countdown, recently opened community
  * capsules, and forum-wide counts. Only reads: a letter whose day has come
- * but isn't open yet shows as due, and the page asks POST /api/time-capsule/open.
+ * but isn't open yet shows as due, and the page asks POST /api/time-capsule-letters/open.
  */
-class PageController implements RequestHandlerInterface
+class Page
 {
     private const RECENT = 12;
 
@@ -37,10 +39,10 @@ class PageController implements RequestHandlerInterface
     ) {
     }
 
-    public function handle(ServerRequestInterface $request): ResponseInterface
+    public function __invoke(Context $context): ResponseInterface
     {
-        $actor = RequestUtil::getActor($request);
-        $actor->assertCan(Settings::VIEW);
+        $request = $context->request;
+        $actor = $context->getActor();
 
         $community = Community::query()->whereNull('opened_at')->orderBy('opens_at')->first();
 

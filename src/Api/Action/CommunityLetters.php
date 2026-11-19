@@ -1,28 +1,28 @@
 <?php
 
-namespace ErnestDefoe\TimeCapsule\Api;
+namespace ErnestDefoe\TimeCapsule\Api\Action;
+
+use ErnestDefoe\TimeCapsule\Api\Errors;
+use ErnestDefoe\TimeCapsule\Api\Input;
 
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
-use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Illuminate\Support\Arr;
 use Laminas\Diactoros\Response\JsonResponse;
+use Flarum\Api\Context;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * GET /api/time-capsule/community/{id}: a community capsule, its counts and its letters: once it
- * has opened, everyone's (30 at a time, ?offset=); while it's sealed, only the viewer's own, as cards.
- *
- * A plain endpoint, not part of CommunityResource, because it serves letters, and letters are never
- * a JSON:API resource: no include may ever reach one (see extend.php). Starting, changing and
- * deleting the capsule itself go through CommunityResource.
+ * GET /api/time-capsule-letters/community/{community}: a community capsule, its counts and its
+ * letters: once it has opened, everyone's (30 at a time, ?offset=); while it's sealed, only the
+ * viewer's own, as cards. An action of LetterResource; starting, changing and deleting the capsule
+ * itself go through CommunityResource.
  */
-class CommunityLettersController implements RequestHandlerInterface
+class CommunityLetters
 {
     private const PAGE = 30;
 
@@ -30,11 +30,11 @@ class CommunityLettersController implements RequestHandlerInterface
     {
     }
 
-    public function handle(ServerRequestInterface $request): ResponseInterface
+    public function __invoke(Context $context): ResponseInterface
     {
-        $actor = RequestUtil::getActor($request);
-        $actor->assertCan(Settings::VIEW);
-        $community = Community::query()->with(['discussion' => Present::visibleDiscussion($actor)])->find((int) Arr::get($request->getQueryParams(), 'id'));
+        $request = $context->request;
+        $actor = $context->getActor();
+        $community = Community::query()->with(['discussion' => Present::visibleDiscussion($actor)])->find((int) Arr::get($request->getAttribute('routeParameters') ?? [], 'community'));
         if (! $community) {
             return Errors::make(404, 'not_found');
         }

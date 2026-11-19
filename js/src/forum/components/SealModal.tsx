@@ -372,7 +372,7 @@ export default class SealModal extends FormModal<Attrs> {
     this.sealing = true;
     m.redraw();
 
-    call<{ capsule: Letter }>('POST', '', form).then(
+    call<{ capsule: Letter }>('POST', '/seal', form).then(
       (r) => {
         this.sealed = true;
         m.redraw();

@@ -1,38 +1,40 @@
 <?php
 
-namespace ErnestDefoe\TimeCapsule\Api;
+namespace ErnestDefoe\TimeCapsule\Api\Action;
+
+use ErnestDefoe\TimeCapsule\Api\Errors;
+use ErnestDefoe\TimeCapsule\Api\Input;
 
 use ErnestDefoe\TimeCapsule\Access;
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Photo;
 use ErnestDefoe\TimeCapsule\Photos;
-use Flarum\Http\RequestUtil;
 use Illuminate\Support\Arr;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\Stream;
+use Flarum\Api\Context;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * GET /api/time-capsule/{id}/photos/{photo}: one photo, decrypted, only for a
+ * GET /api/time-capsule-letters/{id}/photos/{photo}: one photo, decrypted, only for a
  * viewer who may read its letter (Access). A sealed letter's photos answer
  * 404 like a photo that doesn't exist.
  */
-class PhotoController implements RequestHandlerInterface
+class PhotoFile
 {
     public function __construct(private readonly Photos $photos)
     {
     }
 
-    public function handle(ServerRequestInterface $request): ResponseInterface
+    public function __invoke(Context $context): ResponseInterface
     {
-        $actor = RequestUtil::getActor($request);
-        $params = $request->getQueryParams();
-        $capsule = Capsule::query()->find((int) Arr::get($params, 'id'));
-        $photo = $capsule ? Photo::query()->where('capsule_id', $capsule->id)->find((int) Arr::get($params, 'photo')) : null;
+        // Found through the resource's scope; a writer's own sealed letter is in it, so ask Access too.
+        $capsule = $context->model;
+        $photo = Photo::query()->where('capsule_id', $capsule->id)
+            ->find((int) Arr::get($context->request->getAttribute('routeParameters') ?? [], 'photo'));
 
-        if (! $capsule || ! $photo || ! Access::canRead($capsule, $actor)) {
+        if (! $photo || ! Access::canRead($capsule, $context->getActor())) {
             return Errors::make(404, 'not_found');
         }
 

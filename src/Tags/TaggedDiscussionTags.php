@@ -20,7 +20,7 @@ class TaggedDiscussionTags extends DiscussionTags
         $id = (int) $this->settings->get(Settings::TAG);
         $tag = $id ? Tag::whereVisibleTo($author)->find($id) : null;
         if ($tag) {
-            // The API's process() skips the tag's own permission check: ask it here.
+            // Asked here first, so a writer who may no longer post there is recorded as done, not retried.
             return $author->can('startDiscussion', $tag) ? [$id] : false;
         }
 

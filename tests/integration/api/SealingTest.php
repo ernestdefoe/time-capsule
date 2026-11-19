@@ -34,22 +34,33 @@ class SealingTest extends TestCase
         ]);
     }
 
-    /** @return array{int, array<string, mixed>|null, string} */
-    private function send_(string $method, string $path, ?int $as = 2, array $json = [], array $files = []): array
+    /**
+     * A JSON:API letter (Show) also comes back as `capsule`, the row shape the page's own endpoints use.
+     *
+     * @return array{int, array<string, mixed>|null, string}
+     */
+    private function send_(string $method, string $path, ?int $as = 2, array $json = [], array $files = [], array $query = []): array
     {
         $request = $this->request($method, $path, array_filter(['authenticatedAs' => $as, 'json' => $json ?: null]));
         if ($files) {
             $request = $request->withUploadedFiles(['photos' => $files])->withParsedBody($json);
         }
+        if ($query) {
+            $request = $request->withQueryParams($query);
+        }
         $response = $this->send($request);
-        $body = (string) $response->getBody();
+        $raw = (string) $response->getBody();
+        $body = json_decode($raw, true);
+        if (($body['data']['type'] ?? null) === 'time-capsule-letters') {
+            $body['capsule'] = ['id' => (int) $body['data']['id']] + $body['data']['attributes'];
+        }
 
-        return [$response->getStatusCode(), json_decode($body, true), $body];
+        return [$response->getStatusCode(), $body, $raw];
     }
 
     private function seal(array $fields = [], ?int $as = 2, array $files = []): array
     {
-        return $this->send_('POST', '/api/time-capsule', $as, $fields + [
+        return $this->send_('POST', '/api/time-capsule-letters/seal', $as, $fields + [
             'body' => 'Dear future me, '.self::MARKER.'. Hello from the past.',
             'envelope' => 'For later',
             'opensAt' => Carbon::now()->addYears(5)->toIso8601String(),
@@ -70,21 +81,28 @@ class SealingTest extends TestCase
     /** Every place a letter or its writer could surface, as each kind of viewer. */
     private function assertNowhere(int $id, string $marker = self::MARKER): void
     {
-        $paths = [
-            '/api/time-capsule',
-            '/api/time-capsule/'.$id,
-            '/api/users/2',
-            '/api/users/2?include=groups',
-            '/api/forum',
-            '/api/notifications',
-            '/api/discussions',
+        $requests = [
+            ['/api/time-capsule-letters/page', []],
+            ['/api/time-capsule-letters/'.$id, []],
+            ['/api/time-capsule-letters', []],
+            ['/api/users/2', ['include' => 'groups']],
+            ['/api', []],
+            ['/api/notifications', []],
+            ['/api/discussions', []],
         ];
+        // No resource has a relationship to letters: asking for one by any name gets nothing.
+        foreach (['/api/discussions', '/api/users/2', '/api'] as $path) {
+            foreach (['letters', 'timeCapsuleLetters', 'time-capsule-letters', 'capsules'] as $include) {
+                $requests[] = [$path, ['include' => $include]];
+            }
+        }
 
         foreach ([null, 1, 2, 3] as $as) {
-            foreach ($paths as $path) {
-                [, , $raw] = $this->send_('GET', $path, $as);
-                $this->assertStringNotContainsString($marker, $raw, "$path as ".($as ?? 'guest'));
-                $this->assertStringNotContainsString('tc1:', $raw, "ciphertext in $path");
+            foreach ($requests as [$path, $query]) {
+                [, , $raw] = $this->send_('GET', $path, $as, [], [], $query);
+                $where = $path.($query ? '?'.http_build_query($query) : '').' as '.($as ?? 'guest');
+                $this->assertStringNotContainsString($marker, $raw, $where);
+                $this->assertStringNotContainsString('tc1:', $raw, "ciphertext in $where");
             }
         }
     }
@@ -113,7 +131,7 @@ class SealingTest extends TestCase
         $this->assertNowhere($body['capsule']['id']);
 
         // The writer sees the card, never the words.
-        [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$body['capsule']['id'], 2);
+        [$status, $show] = $this->send_('GET', '/api/time-capsule-letters/'.$body['capsule']['id'], 2);
         $this->assertSame(200, $status);
         $this->assertTrue($show['capsule']['sealed']);
         $this->assertArrayNotHasKey('body', $show['capsule']);
@@ -121,7 +139,7 @@ class SealingTest extends TestCase
 
         // Everyone else: as if it didn't exist. Admins included.
         foreach ([null, 1, 3] as $as) {
-            $this->assertSame(404, $this->send_('GET', '/api/time-capsule/'.$body['capsule']['id'], $as)[0]);
+            $this->assertSame(404, $this->send_('GET', '/api/time-capsule-letters/'.$body['capsule']['id'], $as)[0]);
         }
     }
 
@@ -131,14 +149,14 @@ class SealingTest extends TestCase
         [, $body] = $this->seal(['peek' => true]);
         $id = $body['capsule']['id'];
 
-        [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$id, 2);
+        [$status, $show] = $this->send_('GET', '/api/time-capsule-letters/'.$id, 2);
         $this->assertSame(200, $status);
         $this->assertStringContainsString(self::MARKER, $show['capsule']['body']);
         $this->assertFalse($show['capsule']['firstRead']);
 
         foreach ([null, 1, 3] as $as) {
-            $this->assertSame(404, $this->send_('GET', '/api/time-capsule/'.$id, $as)[0]);
-            [, , $raw] = $this->send_('GET', '/api/time-capsule', $as);
+            $this->assertSame(404, $this->send_('GET', '/api/time-capsule-letters/'.$id, $as)[0]);
+            [, , $raw] = $this->send_('GET', '/api/time-capsule-letters/page', $as);
             $this->assertStringNotContainsString(self::MARKER, $raw);
         }
     }
@@ -154,7 +172,7 @@ class SealingTest extends TestCase
         $photo = $this->database()->table('time_capsule_photos')->first();
         $id = $body['capsule']['id'];
         foreach ([null, 1, 2, 3] as $as) {
-            $this->assertSame(404, $this->send_('GET', "/api/time-capsule/$id/photos/{$photo->id}", $as)[0]);
+            $this->assertSame(404, $this->send_('GET', "/api/time-capsule-letters/$id/photos/{$photo->id}", $as)[0]);
         }
 
         $file = $this->app()->getContainer()->make(\Flarum\Foundation\Paths::class)->storage.'/time-capsule/photos/'.$photo->file;
@@ -171,14 +189,14 @@ class SealingTest extends TestCase
         $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute()]);
 
         // The writer's page asks for it to open (no scheduler run yet).
-        $this->send_('POST', '/api/time-capsule/open', 2);
-        [, $page] = $this->send_('GET', '/api/time-capsule', 2);
+        $this->send_('POST', '/api/time-capsule-letters/open', 2);
+        [, $page] = $this->send_('GET', '/api/time-capsule-letters/page', 2);
         $this->assertFalse($page['mine'][0]['sealed']);
         $this->assertStringContainsString(self::MARKER, $page['mine'][0]['body']);
 
         foreach ([null, 1, 3] as $as) {
-            $this->assertSame(404, $this->send_('GET', '/api/time-capsule/'.$id, $as)[0]);
-            [, , $raw] = $this->send_('GET', '/api/time-capsule', $as);
+            $this->assertSame(404, $this->send_('GET', '/api/time-capsule-letters/'.$id, $as)[0]);
+            [, , $raw] = $this->send_('GET', '/api/time-capsule-letters/page', $as);
             $this->assertStringNotContainsString(self::MARKER, $raw);
         }
     }
@@ -192,16 +210,16 @@ class SealingTest extends TestCase
         $this->app()->getContainer()->make(\ErnestDefoe\TimeCapsule\Opener::class)->run();
 
         foreach ([null, 3] as $as) {
-            [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$id, $as);
+            [$status, $show] = $this->send_('GET', '/api/time-capsule-letters/'.$id, $as);
             $this->assertSame(200, $status);
             $this->assertStringContainsString(self::MARKER, $show['capsule']['body']);
             $this->assertCount(1, $show['capsule']['photos']);
-            [, $page] = $this->send_('GET', '/api/time-capsule', $as);
+            [, $page] = $this->send_('GET', '/api/time-capsule-letters/page', $as);
             $this->assertSame($id, $page['recent'][0]['id']);
         }
 
         $photo = $this->database()->table('time_capsule_photos')->first();
-        $response = $this->send($this->request('GET', "/api/time-capsule/$id/photos/{$photo->id}"));
+        $response = $this->send($this->request('GET', "/api/time-capsule-letters/$id/photos/{$photo->id}"));
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('image/webp', $response->getHeaderLine('Content-Type'));
         $this->assertStringStartsWith('private', $response->getHeaderLine('Cache-Control'));
@@ -214,15 +232,15 @@ class SealingTest extends TestCase
         [, $body] = $this->seal(['opensAt' => Carbon::now()->addDays(2)->toIso8601String()]);
         $id = $body['capsule']['id'];
         $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute()]);
-        $this->send_('POST', '/api/time-capsule/open', 2);
+        $this->send_('POST', '/api/time-capsule-letters/open', 2);
 
         // Reading is a GET and changes nothing; the envelope opening on screen marks it read.
-        $this->assertTrue($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead']);
-        $this->assertTrue($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead']);
-        $this->assertSame(204, $this->send_('POST', '/api/time-capsule/'.$id.'/read', 3)[0]);
-        $this->assertTrue($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead'], 'only the writer marks it');
-        $this->assertSame(204, $this->send_('POST', '/api/time-capsule/'.$id.'/read', 2)[0]);
-        $this->assertFalse($this->send_('GET', '/api/time-capsule/'.$id, 2)[1]['capsule']['firstRead']);
+        $this->assertTrue($this->send_('GET', '/api/time-capsule-letters/'.$id, 2)[1]['capsule']['firstRead']);
+        $this->assertTrue($this->send_('GET', '/api/time-capsule-letters/'.$id, 2)[1]['capsule']['firstRead']);
+        $this->assertSame(204, $this->send_('POST', '/api/time-capsule-letters/'.$id.'/read', 3)[0]);
+        $this->assertTrue($this->send_('GET', '/api/time-capsule-letters/'.$id, 2)[1]['capsule']['firstRead'], 'only the writer marks it');
+        $this->assertSame(204, $this->send_('POST', '/api/time-capsule-letters/'.$id.'/read', 2)[0]);
+        $this->assertFalse($this->send_('GET', '/api/time-capsule-letters/'.$id, 2)[1]['capsule']['firstRead']);
     }
 
     #[Test]
@@ -258,11 +276,11 @@ class SealingTest extends TestCase
         $this->assertSame(1, $this->database()->table('time_capsules')->count());
 
         // Opening and reading still work: the letter shows as unreadable, nothing 500s.
-        $this->assertSame(200, $this->send_('POST', '/api/time-capsule/open', 2)[0]);
-        [$status, $show] = $this->send_('GET', '/api/time-capsule/'.$body['capsule']['id'], 2);
+        $this->assertSame(200, $this->send_('POST', '/api/time-capsule-letters/open', 2)[0]);
+        [$status, $show] = $this->send_('GET', '/api/time-capsule-letters/'.$body['capsule']['id'], 2);
         $this->assertSame(200, $status);
         $this->assertFalse($show['capsule']['readable']);
-        $this->assertSame(200, $this->send_('GET', '/api/time-capsule', 2)[0]);
+        $this->assertSame(200, $this->send_('GET', '/api/time-capsule-letters/page', 2)[0]);
     }
 
     #[Test]
@@ -312,14 +330,14 @@ class SealingTest extends TestCase
         $photo = $this->database()->table('time_capsule_photos')->first();
         $file = $this->app()->getContainer()->make(\Flarum\Foundation\Paths::class)->storage.'/time-capsule/photos/'.$photo->file;
 
-        $this->assertSame(404, $this->send_('DELETE', '/api/time-capsule/'.$id, 3)[0]);
-        $this->assertSame(204, $this->send_('DELETE', '/api/time-capsule/'.$id, 2)[0]);
+        $this->assertSame(404, $this->send_('DELETE', '/api/time-capsule-letters/'.$id, 3)[0]);
+        $this->assertSame(204, $this->send_('DELETE', '/api/time-capsule-letters/'.$id, 2)[0]);
         $this->assertSame(0, $this->database()->table('time_capsules')->count());
         $this->assertSame(0, $this->database()->table('time_capsule_photos')->count());
         $this->assertFileDoesNotExist($file);
 
         [, $body] = $this->seal();
-        $this->assertSame(204, $this->send_('DELETE', '/api/time-capsule/'.$body['capsule']['id'], 1)[0]);
+        $this->assertSame(204, $this->send_('DELETE', '/api/time-capsule-letters/'.$body['capsule']['id'], 1)[0]);
     }
 
     #[Test]
@@ -351,5 +369,47 @@ class SealingTest extends TestCase
         $this->assertSame(204, $this->send_('DELETE', '/api/users/2', 1)[0]);
         $this->assertSame(0, $this->database()->table('time_capsule_photos')->count());
         $this->assertFileDoesNotExist($file);
+    }
+
+    #[Test]
+    public function no_resource_includes_letters()
+    {
+        $this->seal();
+        foreach (['/api/discussions', '/api/users/2', '/api'] as $path) {
+            foreach (['letters', 'timeCapsuleLetters'] as $include) {
+                [$status, $body] = $this->send_('GET', $path, 2, [], [], ['include' => $include]);
+                $this->assertSame(400, $status, "$path?include=$include ".json_encode($body));
+                $this->assertArrayNotHasKey('included', $body ?? []);
+            }
+        }
+    }
+
+    #[Test]
+    public function index_and_show_carry_the_text_only_once_it_may_be_read()
+    {
+        [, $sealed] = $this->seal(['visibility' => 'public']);
+        $id = $sealed['capsule']['id'];
+
+        // Sealed: the writer's Show is the card; nobody else finds it; Index has nothing.
+        [$status, $show] = $this->send_('GET', '/api/time-capsule-letters/'.$id, 2);
+        $this->assertSame(200, $status);
+        $this->assertArrayNotHasKey('body', $show['data']['attributes']);
+        $this->assertArrayNotHasKey('photos', $show['data']['attributes']);
+        foreach ([null, 1, 3] as $as) {
+            $this->assertSame(404, $this->send_('GET', '/api/time-capsule-letters/'.$id, $as)[0]);
+        }
+        [, $index] = $this->send_('GET', '/api/time-capsule-letters', 2);
+        $this->assertSame([], $index['data']);
+
+        // Opened: the text is there, in Show and in the writer's Index.
+        $this->database()->table('time_capsules')->where('id', $id)->update(['opens_at' => Carbon::now()->subMinute()]);
+        $this->send_('POST', '/api/time-capsule-letters/open', 2);
+        foreach ([null, 3] as $as) {
+            [, $show] = $this->send_('GET', '/api/time-capsule-letters/'.$id, $as);
+            $this->assertStringContainsString(self::MARKER, $show['data']['attributes']['body']);
+        }
+        [, $index] = $this->send_('GET', '/api/time-capsule-letters', 2);
+        $this->assertStringContainsString(self::MARKER, $index['data'][0]['attributes']['body']);
+        $this->assertSame(401, $this->send_('GET', '/api/time-capsule-letters', null)[0]);
     }
 }

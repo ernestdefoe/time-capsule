@@ -24,9 +24,15 @@ Letters to the future, for Flarum 2. Members write a letter, add photos, and pic
 
 Letters are encrypted with the key in `storage/time-capsule/key` (or `'time-capsule' => ['key' => '<base64, 32 bytes>']` in `config.php`). Back up `storage/time-capsule/` with your database: without the key, sealed letters can never be opened.
 
-## Why letters have their own endpoints
+## How the seal holds in the API
 
-Letters are served by plain JSON endpoints under `/api/time-capsule` (the page, your opened letters, one letter, a photo, sealing, deleting, marking a letter read, opening due ones, a community capsule's letters), not by a JSON:API resource. That is on purpose: with no letter resource, no `include` from any other resource or extension can ever reach a letter, so a sealed letter's words can't leak through one. Each endpoint asks one gate (`Access::canRead()`) and decrypts in one place (`Present::capsule()`), and the tests check every endpoint for every viewer. The community capsule itself, which holds no letter text, is an ordinary resource: `time-capsule-communities`.
+Letters are one JSON:API resource, `time-capsule-letters`, and three things keep a sealed letter's words out of every response:
+
+- **Who finds a letter.** A viewer finds only their own letters (sealed ones as cards) and opened letters they may read. Anyone else's sealed or private letter is "not found", the same as one that doesn't exist.
+- **What a letter shows.** Its words, photos, writer and discussion are fields visible only when the letter may be read: opened and allowed, or the writer's own kept key.
+- **No way in through an include.** No other resource has a relationship to letters, so no `include` from any resource or extension can reach one.
+
+The page's own calls (the page, sealing with photos, a photo, opening what's due, marking a letter read, a community capsule's letters) are custom endpoints on the same resource, and the tests check every endpoint, and every include, for every viewer. The community capsule itself, which holds no letter text, is its own resource: `time-capsule-communities`.
 
 ## Install
 
