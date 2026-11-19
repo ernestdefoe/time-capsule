@@ -13,7 +13,8 @@
  * The scheduler opens letters every minute (Opener: idempotent, safe to
  * overlap or rerun). GET requests only read: a page that shows a due letter
  * asks POST /api/time-capsule/open, which opens the viewer's own due letters
- * (forums without a running scheduler still open letters).
+ * and any due community capsule (forums without a running scheduler still
+ * open letters).
  */
 
 use ErnestDefoe\TimeCapsule\Api;

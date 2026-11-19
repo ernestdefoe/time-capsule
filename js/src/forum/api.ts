@@ -1,6 +1,5 @@
 import app from 'flarum/forum/app';
 import extractText from 'flarum/common/utils/extractText';
-import type Model from 'flarum/common/Model';
 import { t } from './util';
 
 export { longDate, t } from './util';
@@ -93,14 +92,6 @@ export function call<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: strin
       throw error;
     },
   });
-}
-
-/** A community capsule as a store record, to change or delete it through its JSON:API resource. */
-export function communityRecord(id: number): Model {
-  return (
-    app.store.getById('time-capsule-communities', String(id)) ||
-    app.store.pushObject({ type: 'time-capsule-communities', id: String(id), attributes: {} } as any)!
-  );
 }
 
 /** Whole calendar years, months and days from a to b (b later), the way people count them. */

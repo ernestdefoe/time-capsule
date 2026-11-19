@@ -4,7 +4,8 @@ import Button from 'flarum/common/components/Button';
 import Switch from 'flarum/common/components/Switch';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { communityRecord, dateInput, localMidnight, t, type CommunityRow } from '../api';
+import Community from '../models/Community';
+import { dateInput, localMidnight, t, type CommunityRow } from '../api';
 
 interface Attrs extends IFormModalAttrs {
   community: CommunityRow | null;
@@ -134,7 +135,7 @@ export default class CommunityModal extends FormModal<Attrs> {
     };
     if (!c || this.date !== this.initialDate) attributes.opensAt = localMidnight(+match[1], +match[2] - 1, +match[3]);
 
-    (c ? communityRecord(c.id) : app.store.createRecord('time-capsule-communities')).save(attributes).then(
+    (c ? Community.from(c) : app.store.createRecord('time-capsule-communities')).save(attributes).then(
       () => {
         this.hide();
         this.attrs.onsave();

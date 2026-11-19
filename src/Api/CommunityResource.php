@@ -94,8 +94,9 @@ class CommunityResource extends AbstractDatabaseResource
     }
 
     /**
-     * One sealed capsule at a time; a sealed one only; a day between an hour from now and the
-     * forum's limit; and once members have written for a day, it can only move later.
+     * A sealed one only; a day between an hour from now and the forum's limit; and once members
+     * have written for a day, it can only move later. (One sealed at a time is checked under the
+     * lock in saveModel().)
      *
      * @param Community $model
      * @param Context $context
@@ -104,9 +105,6 @@ class CommunityResource extends AbstractDatabaseResource
     {
         if ($model->exists && $model->getOriginal('opened_at') !== null) {
             throw new ValidationException(['opensAt' => $this->trans('community_open')]);
-        }
-        if (! $model->exists && Community::query()->whereNull('opened_at')->exists()) {
-            throw new ValidationException(['title' => $this->trans('community_exists')]);
         }
 
         $model->description = $model->description !== null && trim($model->description) !== '' ? trim($model->description) : null;

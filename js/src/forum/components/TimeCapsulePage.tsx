@@ -6,7 +6,8 @@ import Icon from 'flarum/common/components/Icon';
 import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
-import { call, communityRecord, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
+import Community from '../models/Community';
+import { call, duration, errorText, longDate, t, type CommunityRow, type Letter, type PageData } from '../api';
 import Countdown from './Countdown';
 import { OpenedCard, SealedCard } from './Cards';
 import LetterView from './LetterView';
@@ -92,8 +93,8 @@ export default class TimeCapsulePage extends Page {
    * minute, or isn't running on this forum): ask for it to open, then show it opened. Once per visit.
    */
   openDue(): Promise<void> | void {
-    const now = new Date().toISOString();
-    const due = (opensAt: string) => opensAt <= now;
+    const now = Date.now();
+    const due = (opensAt: string) => new Date(opensAt).getTime() <= now;
     const shown = [
       ...(this.data?.mine.filter((l) => l.sealed).map((l) => l.opensAt) || []),
       this.data?.community?.opensAt,
@@ -508,7 +509,7 @@ export default class TimeCapsulePage extends Page {
 
   removeCommunity(c: CommunityRow) {
     if (!confirm(extractText(t('community.delete_confirm', { count: c.letters })))) return;
-    communityRecord(c.id)
+    Community.from(c)
       .delete()
       .then(() => {
         if (this.mode === 'community') m.route.set(app.route('time-capsule'));
