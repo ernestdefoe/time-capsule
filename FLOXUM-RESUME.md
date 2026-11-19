@@ -43,3 +43,5 @@ The 9 plain letter endpoints were a pre-floxum watch item across 3+ files. Make 
 - Only this repo is affected. Kiosk and the six other repos created on 2026-11-10 (secret-santa, garage, hype-market, forum-pet, mural, slow-mail) all have push runs.
 - Tried: every workflow disabled and re-enabled (`gh workflow disable/enable`), then this push as the test. Result is in the next note.
 - Until it's fixed: run CI by hand (`gh workflow run ci.yml / backend.yml / draft-release.yml`) and the announcer with `gh workflow run publish-to-flarum.yml -f tag_name=X`.
+- Result: still no runs after the re-enable (test push 5508d59 → 0 push runs). The credentials are the same as Kiosk's (HTTPS, gh OAuth token with `repo` and `workflow` scopes, osxkeychain), and the workflow files match Kiosk's byte for byte, apart from one extra Prettier step in ci.yml.
+- Cause: on GitHub's side, for this repo only. Nothing in the repo, its settings or the push credentials explains it. If it still happens after Nov 26, ask GitHub Support (the repo receives push webhooks, but Actions never creates push or release runs). Don't recreate the repo: that loses the Packagist hook and history.
