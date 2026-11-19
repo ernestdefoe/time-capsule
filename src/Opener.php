@@ -8,13 +8,11 @@ use ErnestDefoe\TimeCapsule\Notification\CommunityOpenedBlueprint;
 use Flarum\Api\JsonApi;
 use Flarum\Api\Resource\DiscussionResource;
 use Flarum\Discussion\Discussion;
-use Flarum\Extension\ExtensionManager;
 use Flarum\Group\Group;
 use Flarum\Http\UrlGenerator;
 use Flarum\Locale\TranslatorInterface;
 use Flarum\Notification\Notification;
 use Flarum\Notification\NotificationSyncer;
-use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -44,8 +42,7 @@ class Opener
         private readonly Vault $vault,
         private readonly NotificationSyncer $notifications,
         private readonly JsonApi $api,
-        private readonly SettingsRepositoryInterface $settings,
-        private readonly ExtensionManager $extensions,
+        private readonly DiscussionTags $tags,
         private readonly TranslatorInterface $translator,
         private readonly UrlGenerator $url,
         private readonly LoggerInterface $log,
@@ -197,7 +194,7 @@ class Opener
         // Everything that can fail or say no runs BEFORE the claim, so a throw leaves the letter
         // to be tried again, and a no is recorded as done.
         $author = $capsule->user;
-        $tags = $author ? $this->tagsFor($author) : false;
+        $tags = $author ? $this->tags->forAuthor($author) : false;
         $body = $this->vault->open($capsule->sealed_body, $capsule->context());
 
         if (! $author || $tags === false || ! $author->can('startDiscussion') || $body === null) {
@@ -224,7 +221,7 @@ class Opener
     private function postCommunity(Community $community): void
     {
         $author = $community->user;
-        $tags = $author ? $this->tagsFor($author) : false;
+        $tags = $author ? $this->tags->forAuthor($author) : false;
         if (! $author || $tags === false || ! $author->can('startDiscussion')) {
             Community::query()->whereKey($community->id)->whereNull('posted_at')->update(['posted_at' => Carbon::now()]);
 
@@ -272,35 +269,14 @@ class Opener
         return $class::query()->whereKey($id)->whereNull('posted_at')->update(['posted_at' => Carbon::now()]) === 1;
     }
 
-    /**
-     * The admin's tag for opened letters, if the author may start a discussion there.
-     *
-     * @return list<int>|null|false null: no tags needed; false: can't post.
-     */
-    private function tagsFor(User $author): array|null|false
-    {
-        if (! $this->extensions->isEnabled('flarum-tags') || ! class_exists(\Flarum\Tags\Tag::class)) {
-            return null;
-        }
-
-        $id = (int) $this->settings->get(Settings::TAG);
-        $tag = $id ? \Flarum\Tags\Tag::whereVisibleTo($author)->find($id) : null;
-        if ($tag) {
-            // The API's process() skips the tag's own permission check: ask it here.
-            return $author->can('startDiscussion', $tag) ? [$id] : false;
-        }
-
-        return $author->hasPermission('bypassTagCounts') ? null : false;
-    }
-
     private function date(Carbon $date): string
     {
-        return $date->locale((string) ($this->settings->get('default_locale') ?: 'en'))->isoFormat('LL');
+        return $date->locale($this->translator->getLocale())->isoFormat('LL');
     }
 
     private function span(Capsule $capsule): string
     {
-        return $capsule->sealed_at->locale((string) ($this->settings->get('default_locale') ?: 'en'))
+        return $capsule->sealed_at->locale($this->translator->getLocale())
             ->diffForHumans($capsule->opened_at ?? Carbon::now(), ['syntax' => Carbon::DIFF_ABSOLUTE, 'parts' => 2]);
     }
 }

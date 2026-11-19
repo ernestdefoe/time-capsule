@@ -8,8 +8,6 @@ import type Mithril from 'mithril';
 import { duration, longDate, t, type Letter, type PhotoRow } from '../api';
 import { Avatar, personLink } from './Cards';
 
-declare const m: Mithril.Static;
-
 interface Attrs extends ComponentAttrs {
   letter: Letter;
   ondelete?: () => void;
@@ -76,23 +74,7 @@ export default class LetterView extends Component<Attrs> {
           </div>
         )}
         <article className={'TimeCapsuleLetter' + (this.attrs.compact ? ' TimeCapsuleLetter--compact' : '')}>
-          <header className="TimeCapsuleLetter-head">
-            {Avatar({ person: letter.author })}
-            <div className="TimeCapsuleLetter-meta">
-              <div className="TimeCapsuleLetter-from">
-                {letter.mine ? t('letter.from_you') : t('letter.from', { name: personLink(letter.author) })}
-              </div>
-              <div className="TimeCapsuleLetter-dates">
-                {letter.sealed
-                  ? t('letter.peek_dates', { sealed: longDate(letter.sealedAt), opens: longDate(letter.opensAt) })
-                  : t('letter.dates', {
-                      sealed: longDate(letter.sealedAt),
-                      opened: longDate(letter.openedAt || letter.opensAt),
-                      time: duration(new Date(letter.sealedAt), new Date(letter.openedAt || letter.opensAt)),
-                    })}
-              </div>
-            </div>
-          </header>
+          {this.head(letter)}
           {letter.sealed && (
             <p className="TimeCapsuleLetter-peek">
               <Icon name="fas fa-key" /> {t('letter.peek_note')}
@@ -106,48 +88,86 @@ export default class LetterView extends Component<Attrs> {
               this.paragraphs(letter.body || '')
             )}
           </div>
-          {letter.photos && letter.photos.length > 0 && (
-            <div className={'TimeCapsuleLetter-photos TimeCapsuleLetter-photos--' + Math.min(letter.photos.length, 4)}>
-              {letter.photos.map((photo, i) => (
-                <button
-                  type="button"
-                  className="TimeCapsuleLetter-photo"
-                  aria-label={extractText(t('letter.photo', { number: i + 1 }))}
-                  onclick={() => (this.photo = photo)}
-                >
-                  <img src={photo.url} alt="" loading="lazy" width={photo.width} height={photo.height} />
-                </button>
-              ))}
-            </div>
-          )}
-          <footer className="TimeCapsuleLetter-foot">
-            {letter.discussion && (
-              <Link
-                className="Button"
-                href={app.route('discussion', { id: letter.discussion.id + (letter.discussion.slug ? '-' + letter.discussion.slug : '') })}
-              >
-                <Icon name="far fa-comments" /> {t('letter.discussion')}
-              </Link>
-            )}
-            {letter.canDelete && this.attrs.ondelete && (
-              <Button className="Button Button--link TimeCapsuleLetter-delete" icon="far fa-trash-can" onclick={this.attrs.ondelete}>
-                {t('letter.delete')}
-              </Button>
-            )}
-          </footer>
+          {this.photos(letter)}
+          {this.foot(letter)}
         </article>
-        {this.photo && (
-          <div
-            className="TimeCapsuleLightbox"
-            role="dialog"
-            aria-modal="true"
-            aria-label={extractText(t('letter.photo_view'))}
-            onclick={() => (this.photo = null)}
-          >
-            <img src={this.photo.url} alt="" />
-            <Button className="Button Button--icon TimeCapsuleLightbox-close" icon="fas fa-xmark" aria-label={extractText(t('letter.close'))} />
+        {this.lightbox()}
+      </div>
+    );
+  }
+
+  private head(letter: Letter): Mithril.Children {
+    return (
+      <header className="TimeCapsuleLetter-head">
+        {Avatar({ person: letter.author })}
+        <div className="TimeCapsuleLetter-meta">
+          <div className="TimeCapsuleLetter-from">{letter.mine ? t('letter.from_you') : t('letter.from', { name: personLink(letter.author) })}</div>
+          <div className="TimeCapsuleLetter-dates">
+            {letter.sealed
+              ? t('letter.peek_dates', { sealed: longDate(letter.sealedAt), opens: longDate(letter.opensAt) })
+              : t('letter.dates', {
+                  sealed: longDate(letter.sealedAt),
+                  opened: longDate(letter.openedAt || letter.opensAt),
+                  time: duration(new Date(letter.sealedAt), new Date(letter.openedAt || letter.opensAt)),
+                })}
           </div>
+        </div>
+      </header>
+    );
+  }
+
+  private photos(letter: Letter): Mithril.Children {
+    if (!letter.photos || letter.photos.length === 0) return null;
+
+    return (
+      <div className={'TimeCapsuleLetter-photos TimeCapsuleLetter-photos--' + Math.min(letter.photos.length, 4)}>
+        {letter.photos.map((photo, i) => (
+          <button
+            type="button"
+            className="TimeCapsuleLetter-photo"
+            aria-label={extractText(t('letter.photo', { number: i + 1 }))}
+            onclick={() => (this.photo = photo)}
+          >
+            <img src={photo.url} alt="" loading="lazy" width={photo.width} height={photo.height} />
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  private foot(letter: Letter): Mithril.Children {
+    return (
+      <footer className="TimeCapsuleLetter-foot">
+        {letter.discussion && (
+          <Link
+            className="Button"
+            href={app.route('discussion', { id: letter.discussion.id + (letter.discussion.slug ? '-' + letter.discussion.slug : '') })}
+          >
+            <Icon name="far fa-comments" /> {t('letter.discussion')}
+          </Link>
         )}
+        {letter.canDelete && this.attrs.ondelete && (
+          <Button className="Button Button--link TimeCapsuleLetter-delete" icon="far fa-trash-can" onclick={this.attrs.ondelete}>
+            {t('letter.delete')}
+          </Button>
+        )}
+      </footer>
+    );
+  }
+
+  private lightbox(): Mithril.Children {
+    if (!this.photo) return null;
+
+    return (
+      <div
+        className="TimeCapsuleLightbox"
+        role="dialog"
+        aria-modal="true"
+        aria-label={extractText(t('letter.photo_view'))}
+        onclick={() => (this.photo = null)}
+      >
+        <img src={this.photo.url} alt="" />
+        <Button className="Button Button--icon TimeCapsuleLightbox-close" icon="fas fa-xmark" aria-label={extractText(t('letter.close'))} />
       </div>
     );
   }

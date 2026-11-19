@@ -1,8 +1,5 @@
 import app from 'flarum/admin/app';
 import Extend from 'flarum/common/extenders';
-import type Mithril from 'mithril';
-
-declare const m: Mithril.Static;
 
 const t = (key: string) => app.translator.trans(`ernestdefoe-time-capsule.admin.${key}`, {}, true);
 
@@ -23,7 +20,6 @@ export default [
               setting: 'time-capsule.tag',
               type: 'select',
               options: tagOptions(),
-              default: '',
               label: t('settings.tag'),
               help: t('settings.tag_help'),
             }

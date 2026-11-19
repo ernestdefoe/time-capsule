@@ -6,8 +6,6 @@ import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
 import { duration, longDate, progress, t, type Letter, type Person } from '../api';
 
-declare const m: Mithril.Static;
-
 export function Avatar({ person, size = 'medium' }: { person: Person | null | undefined; size?: string }): Mithril.Children {
   if (!person) return <span className={'Avatar Avatar--' + size + ' TimeCapsuleAvatar--gone'} />;
   return person.avatar ? (
@@ -54,6 +52,31 @@ function facts(letter: Letter): Mithril.Children {
   return <ul className="TimeCapsuleCard-facts">{items}</ul>;
 }
 
+/** Reread (when the writer kept a key) and delete, under a sealed card. */
+function actions(letter: Letter, onread?: () => void, ondelete?: () => void): Mithril.Children {
+  return (
+    <div className="TimeCapsuleCard-actions">
+      {letter.peek && onread ? (
+        <Button className="Button Button--text" icon="fas fa-key" onclick={onread}>
+          {t('card.reread')}
+        </Button>
+      ) : (
+        <span className="TimeCapsuleCard-locked">
+          <Icon name="fas fa-lock" /> {t('card.locked')}
+        </span>
+      )}
+      {letter.canDelete && ondelete && (
+        <Button
+          className="Button Button--icon Button--link TimeCapsuleCard-delete"
+          icon="far fa-trash-can"
+          aria-label={extractText(t('card.delete'))}
+          onclick={ondelete}
+        />
+      )}
+    </div>
+  );
+}
+
 /** A sealed letter: an envelope, a wax seal, how long until it opens. */
 export function SealedCard({ letter, onread, ondelete }: { letter: Letter; onread?: () => void; ondelete?: () => void }): Mithril.Children {
   const pct = Math.round(progress(letter) * 100);
@@ -86,27 +109,7 @@ export function SealedCard({ letter, onread, ondelete }: { letter: Letter; onrea
           <span style={{ width: pct + '%' }} />
         </div>
         {facts(letter)}
-        {(letter.peek || letter.canDelete) && (
-          <div className="TimeCapsuleCard-actions">
-            {letter.peek && onread ? (
-              <Button className="Button Button--text" icon="fas fa-key" onclick={onread}>
-                {t('card.reread')}
-              </Button>
-            ) : (
-              <span className="TimeCapsuleCard-locked">
-                <Icon name="fas fa-lock" /> {t('card.locked')}
-              </span>
-            )}
-            {letter.canDelete && ondelete && (
-              <Button
-                className="Button Button--icon Button--link TimeCapsuleCard-delete"
-                icon="far fa-trash-can"
-                aria-label={extractText(t('card.delete'))}
-                onclick={ondelete}
-              />
-            )}
-          </div>
-        )}
+        {(letter.peek || letter.canDelete) && actions(letter, onread, ondelete)}
       </div>
     </article>
   );

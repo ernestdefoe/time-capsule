@@ -16,19 +16,17 @@
  */
 
 use ErnestDefoe\TimeCapsule\Api;
-use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Console\OpenCommand;
 use ErnestDefoe\TimeCapsule\Gdpr\ExportActor;
 use ErnestDefoe\TimeCapsule\Gdpr\TimeCapsuleData;
 use ErnestDefoe\TimeCapsule\Http\PageContent;
+use ErnestDefoe\TimeCapsule\Listener\DeleteUserLetters;
 use ErnestDefoe\TimeCapsule\Notification\CapsuleOpenedBlueprint;
 use ErnestDefoe\TimeCapsule\Notification\CommunityOpenedBlueprint;
-use ErnestDefoe\TimeCapsule\Photos;
-use ErnestDefoe\TimeCapsule\Settings;
-use Flarum\Api\Context;
+use ErnestDefoe\TimeCapsule\Tags;
 use Flarum\Api\Resource\ForumResource;
-use Flarum\Api\Schema;
 use Flarum\Extend;
+use Flarum\Foundation\Paths;
 use Flarum\Gdpr\Events\Exported;
 use Flarum\Gdpr\Events\Exporting;
 use Flarum\Gdpr\Extend\UserData;
@@ -74,25 +72,30 @@ return [
         ->type(CapsuleOpenedBlueprint::class, ['alert', 'email'])
         ->type(CommunityOpenedBlueprint::class, ['alert']),
 
-    // The viewer's own permissions: already loaded, so no query.
     (new Extend\ApiResource(ForumResource::class))
-        ->fields(fn () => [
-            Schema\Boolean::make('timeCapsuleCanView')
-                ->get(fn ($forum, Context $context) => $context->getActor()->can(Settings::VIEW)),
+        ->fields(Api\ForumFields::class),
+
+    // The key file and the encrypted photos (Vault::DISK): private, outside public/.
+    (new Extend\Filesystem())
+        ->disk('ernestdefoe-time-capsule', fn (Paths $paths): array => [
+            'root' => $paths->storage.'/time-capsule',
+            'visibility' => 'private',
         ]),
 
+    // String keys, not Settings:: constants: extend.php runs on every boot, also mid-deploy.
     (new Extend\Settings())
-        ->default(Settings::NAV, true)
-        ->default(Settings::MAX_YEARS, Settings::DEFAULT_MAX_YEARS)
-        ->serializeToForum('timeCapsuleNav', Settings::NAV, 'boolval'),
+        ->default('time-capsule.nav', true)
+        ->default('time-capsule.tag', '')
+        ->default('time-capsule.max_years', 25)
+        ->serializeToForum('timeCapsuleNav', 'time-capsule.nav', 'boolval'),
 
-    // Before the user row goes: its foreign keys would take the letters, but not the photo files.
     (new Extend\Event())
-        ->listen(Deleting::class, function (Deleting $event) {
-            resolve(Photos::class)->deleteCapsules(Capsule::query()->where('user_id', $event->user->id)->pluck('id'));
-        }),
+        ->listen(Deleting::class, DeleteUserLetters::class),
 
     (new Extend\Conditional())
+        ->whenExtensionEnabled('flarum-tags', fn () => [
+            (new Extend\ServiceProvider())->register(Tags\TagsServiceProvider::class),
+        ])
         ->whenExtensionEnabled('flarum-gdpr', fn () => [
             (new UserData())->addType(TimeCapsuleData::class),
             (new Extend\Event())

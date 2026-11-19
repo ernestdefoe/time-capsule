@@ -3,8 +3,9 @@
 namespace ErnestDefoe\TimeCapsule;
 
 use Flarum\Foundation\Config;
-use Flarum\Foundation\Paths;
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Filesystem\Factory;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
@@ -14,7 +15,8 @@ use RuntimeException;
  *
  * The key never touches the database, so a look at the tables (or a database
  * dump) reads nothing. It comes from config.php (`'time-capsule' => ['key' =>
- * base64]`) when set there, else from storage/time-capsule/key, written once
+ * base64]`) when set there, else from `key` on the extension's private disk
+ * (storage/time-capsule by default, registered in extend.php), written once
  * with random bytes the first time a letter is sealed. 🚨 Lose that file and
  * every sealed letter is lost with it: the admin page says to back it up.
  *
@@ -26,14 +28,16 @@ use RuntimeException;
  */
 class Vault
 {
+    public const DISK = 'ernestdefoe-time-capsule';
     private const PREFIX = 'tc1:';
+    private const KEY_FILE = 'key';
 
     private ?string $key = null;
 
     public function __construct(
-        private readonly Paths $paths,
+        private readonly Factory $filesystems,
         private readonly Config $config,
-        private readonly ConnectionInterface $db,
+        private readonly Cache $cache,
         private readonly LoggerInterface $log,
     ) {
     }
@@ -69,7 +73,7 @@ class Vault
         }
         try {
             $key = $this->key();
-        } catch (KeyMissing) {
+        } catch (KeyMissing|KeyBusy) {
             return null;
         }
         $plain = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(substr($raw, $size), $context, substr($raw, 0, $size), $key);
@@ -77,14 +81,10 @@ class Vault
         return $plain === false ? null : $plain;
     }
 
-    public function directory(): string
+    /** The private disk that holds the key file and the encrypted photos. */
+    public function disk(): Filesystem
     {
-        return $this->paths->storage.'/time-capsule';
-    }
-
-    public function keyFile(): string
-    {
-        return $this->directory().'/key';
+        return $this->filesystems->disk(self::DISK);
     }
 
     private function key(): string
@@ -108,37 +108,47 @@ class Vault
 
     private function keyFromFile(): string
     {
-        $file = $this->keyFile();
-        if (! is_file($file)) {
-            $this->createKey($file);
+        $disk = $this->disk();
+        if (! $disk->exists(self::KEY_FILE)) {
+            $this->createKey($disk);
         }
 
-        $key = base64_decode(trim((string) @file_get_contents($file)), true);
+        $key = base64_decode(trim((string) $disk->get(self::KEY_FILE)), true);
         if ($key === false || strlen($key) !== SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES) {
-            throw new RuntimeException('Time Capsule cannot read its key at '.$file.'.');
+            throw new RuntimeException('Time Capsule cannot read its key file ('.self::KEY_FILE.' on the '.self::DISK.' disk).');
         }
 
         return $key;
     }
 
-    private function createKey(string $file): void
+    private function createKey(Filesystem $disk): void
     {
-        if ($this->db->table('time_capsules')->exists()) {
-            $this->log->critical('[time-capsule] The key at '.$file.' is missing, but there are sealed letters: they were sealed with that key and cannot be opened without it. Restore storage/time-capsule/key from a backup. Sealing new letters is stopped until then.');
+        $this->assertNoLetters();
+
+        // Two first letters sealed at the same moment must not write two different keys: one process
+        // writes it under a lock, and the other is asked to try again (never made to wait in a request).
+        $created = $this->cache->lock('time-capsule:key', 10)->get(function () use ($disk) {
+            if (! $disk->exists(self::KEY_FILE)) {
+                $this->assertNoLetters();
+                if ($disk->put(self::KEY_FILE, base64_encode(sodium_crypto_aead_xchacha20poly1305_ietf_keygen())) !== true) {
+                    throw new RuntimeException('Time Capsule could not write its key file to the '.self::DISK.' disk.');
+                }
+            }
+
+            return true;
+        });
+
+        if ($created !== true) {
+            throw new KeyBusy('Time Capsule\'s key is being created by another request.');
+        }
+    }
+
+    private function assertNoLetters(): void
+    {
+        if (Capsule::query()->exists()) {
+            $this->log->critical('[time-capsule] The key file is missing from the '.self::DISK.' disk (storage/time-capsule/key), but there are sealed letters: they were sealed with that key and cannot be opened without it. Restore it from a backup. Sealing new letters is stopped until then.');
 
             throw new KeyMissing('Time Capsule\'s key is missing: restore storage/time-capsule/key from a backup.');
         }
-
-        if (! is_dir($this->directory())) {
-            @mkdir($this->directory(), 0770, true);
-        }
-
-        // Written whole to a temporary file, then linked into place: link() fails if another
-        // process got there first (then we read theirs), and nobody ever reads a half-written key.
-        $tmp = $file.'.'.bin2hex(random_bytes(6)).'.tmp';
-        file_put_contents($tmp, base64_encode(sodium_crypto_aead_xchacha20poly1305_ietf_keygen()));
-        @chmod($tmp, 0600);
-        @link($tmp, $file);
-        @unlink($tmp);
     }
 }

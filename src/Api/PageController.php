@@ -5,10 +5,10 @@ namespace ErnestDefoe\TimeCapsule\Api;
 use Carbon\Carbon;
 use ErnestDefoe\TimeCapsule\Capsule;
 use ErnestDefoe\TimeCapsule\Community;
+use ErnestDefoe\TimeCapsule\DiscussionTags;
 use ErnestDefoe\TimeCapsule\Opener;
 use ErnestDefoe\TimeCapsule\Present;
 use ErnestDefoe\TimeCapsule\Settings;
-use Flarum\Extension\ExtensionManager;
 use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
@@ -34,7 +34,7 @@ class PageController implements RequestHandlerInterface
         private readonly Present $present,
         private readonly Opener $opener,
         private readonly SettingsRepositoryInterface $settings,
-        private readonly ExtensionManager $extensions,
+        private readonly DiscussionTags $tags,
     ) {
     }
 
@@ -61,33 +61,50 @@ class PageController implements RequestHandlerInterface
         $opened = Community::query()->whereNotNull('opened_at')->orderByDesc('opened_at')->limit(3)->get();
         $counts = $this->counts($opened->modelKeys(), $community, $actor);
 
-        $stats = Capsule::query()->toBase()->selectRaw(
-            'sum(case when opened_at is null then 1 else 0 end) as sealed, sum(case when opened_at is null then 0 else 1 end) as opened, min(case when opened_at is null then opens_at end) as next_open'
-        )->first();
-
         return new JsonResponse([
             'mine' => $mine->map(fn (Capsule $c) => $this->present->capsule($c, $actor))->values(),
             'recent' => $recent->map(fn (Capsule $c) => $this->present->capsule($c, $actor))->values(),
             'community' => $community ? $this->present->community($community, $actor, $counts[$community->id] ?? []) : null,
             'opened' => $opened->map(fn (Community $c) => $this->present->community($c, $actor, $counts[$c->id] ?? []))->values(),
-            'stats' => [
-                'sealed' => (int) ($stats->sealed ?? 0),
-                'opened' => (int) ($stats->opened ?? 0),
-                'nextOpen' => $stats?->next_open ? Carbon::parse($stats->next_open, 'UTC')->toIso8601String() : null,
-            ],
+            'stats' => $this->stats(),
             'can' => [
                 'create' => $actor->can(Settings::CREATE),
                 'community' => $actor->can(Settings::COMMUNITY),
                 'post' => $this->canPost($actor),
             ],
-            'limits' => [
-                'maxYears' => Input::maxYears($this->settings),
-                'maxPhotos' => Settings::MAX_PHOTOS,
-                'maxLength' => Settings::MAX_LENGTH,
-                'minHours' => Settings::MIN_HOURS,
-                'founded' => (string) $this->settings->get(Settings::FOUNDED),
-            ],
+            'limits' => $this->limits(),
         ]);
+    }
+
+    /**
+     * Forum-wide counts and the next letter to open, in one query.
+     *
+     * @return array{sealed: int, opened: int, nextOpen: string|null}
+     */
+    private function stats(): array
+    {
+        // Raw aggregates so the three numbers cost one query instead of three; portable SQL only.
+        $stats = Capsule::query()->toBase()->selectRaw(
+            'sum(case when opened_at is null then 1 else 0 end) as sealed, sum(case when opened_at is null then 0 else 1 end) as opened, min(case when opened_at is null then opens_at end) as next_open'
+        )->first();
+
+        return [
+            'sealed' => (int) ($stats->sealed ?? 0),
+            'opened' => (int) ($stats->opened ?? 0),
+            'nextOpen' => $stats?->next_open ? Carbon::parse($stats->next_open, 'UTC')->toIso8601String() : null,
+        ];
+    }
+
+    /** @return array{maxYears: int, maxPhotos: int, maxLength: int, minHours: int, founded: string} */
+    private function limits(): array
+    {
+        return [
+            'maxYears' => Input::maxYears($this->settings),
+            'maxPhotos' => Settings::MAX_PHOTOS,
+            'maxLength' => Settings::MAX_LENGTH,
+            'minHours' => Settings::MIN_HOURS,
+            'founded' => (string) $this->settings->get(Settings::FOUNDED),
+        ];
     }
 
     /**
@@ -105,6 +122,7 @@ class PageController implements RequestHandlerInterface
             return [];
         }
 
+        // One grouped query for every capsule shown (a conditional sum for "yours"), not one per capsule.
         return Capsule::query()->toBase()->whereIn('community_id', $ids)->groupBy('community_id')
             ->selectRaw('community_id, count(*) as letters, count(distinct user_id) as members, sum(case when user_id = ? then 1 else 0 end) as mine', [(int) $actor->id])
             ->get()
@@ -119,6 +137,6 @@ class PageController implements RequestHandlerInterface
             return false;
         }
 
-        return ! $this->extensions->isEnabled('flarum-tags') || (int) $this->settings->get(Settings::TAG) > 0 || $actor->hasPermission('bypassTagCounts');
+        return $this->tags->allowsPosting($actor);
     }
 }

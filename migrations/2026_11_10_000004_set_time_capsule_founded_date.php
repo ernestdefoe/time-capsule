@@ -6,6 +6,8 @@ use Illuminate\Database\Schema\Builder;
  * The forum's birthday, for the "forum's anniversary" open date: the first
  * member's join date. Kept as a setting so the composer needs no query, and
  * so an admin can correct it (a forum moved from other software).
+ * Migration::addSettings() takes fixed values; this one comes from the data,
+ * and an admin's own value is never overwritten.
  */
 return [
     'up' => function (Builder $schema) {

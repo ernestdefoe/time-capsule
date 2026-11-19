@@ -5,8 +5,6 @@ import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
 import { call, dateInput, localMidnight, t, type CommunityRow } from '../api';
 
-declare const m: Mithril.Static;
-
 interface Attrs extends IFormModalAttrs {
   community: CommunityRow | null;
   maxYears: number;
@@ -48,9 +46,6 @@ export default class CommunityModal extends FormModal<Attrs> {
   }
 
   content() {
-    const max = new Date();
-    max.setFullYear(max.getFullYear() + this.attrs.maxYears);
-
     return (
       <div className="Modal-body">
         <div className="Form-group">
@@ -75,20 +70,7 @@ export default class CommunityModal extends FormModal<Attrs> {
             oninput={(e: InputEvent) => (this.description = (e.target as HTMLTextAreaElement).value)}
           />
         </div>
-        <div className="Form-group">
-          <label for="TimeCapsuleCommunity-date">{t('community.field_date')}</label>
-          <input
-            id="TimeCapsuleCommunity-date"
-            type="date"
-            className="FormControl"
-            min={dateInput(this.earliest())}
-            max={dateInput(max)}
-            value={this.date}
-            oninput={(e: InputEvent) => (this.date = (e.target as HTMLInputElement).value)}
-          />
-          <p className="helpText">{t('community.field_date_help')}</p>
-          {this.attrs.community?.letters ? <p className="helpText">{t('community.field_date_later')}</p> : null}
-        </div>
+        {this.dateField()}
         <div className="Form-group">
           <Switch state={this.notifyEveryone} onchange={(v: boolean) => (this.notifyEveryone = v)}>
             {t('community.field_notify')}
@@ -107,6 +89,29 @@ export default class CommunityModal extends FormModal<Attrs> {
             {this.attrs.community ? t('community.save') : t('community.create')}
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  /** The opening day: from the soonest allowed (later only, once members have written) to the forum's limit. */
+  dateField(): Mithril.Children {
+    const max = new Date();
+    max.setFullYear(max.getFullYear() + this.attrs.maxYears);
+
+    return (
+      <div className="Form-group">
+        <label for="TimeCapsuleCommunity-date">{t('community.field_date')}</label>
+        <input
+          id="TimeCapsuleCommunity-date"
+          type="date"
+          className="FormControl"
+          min={dateInput(this.earliest())}
+          max={dateInput(max)}
+          value={this.date}
+          oninput={(e: InputEvent) => (this.date = (e.target as HTMLInputElement).value)}
+        />
+        <p className="helpText">{t('community.field_date_help')}</p>
+        {this.attrs.community?.letters ? <p className="helpText">{t('community.field_date_later')}</p> : null}
       </div>
     );
   }

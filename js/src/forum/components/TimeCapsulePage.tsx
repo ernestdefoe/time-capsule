@@ -21,8 +21,6 @@ import LetterView from './LetterView';
  */
 
 declare const flarum: any;
-declare const m: Mithril.Static;
-
 export let PageStructure: any;
 export let IndexSidebar: any;
 
@@ -149,35 +147,7 @@ export default class TimeCapsulePage extends Page {
         {this.hero(data)}
         {data.community ? this.communityHero(data.community, data) : data.can.community && this.startCommunity()}
 
-        {app.session.user && (
-          <section className="TimeCapsuleSection">
-            <h3 className="TimeCapsuleSection-title">
-              <Icon name="fas fa-envelope" /> {t('page.sealed_title')}
-              {sealed.length > 0 && <span className="TimeCapsuleSection-count">{sealed.length}</span>}
-            </h3>
-            {sealed.length ? (
-              <div className="TimeCapsuleGrid">
-                {sealed.map((letter) =>
-                  SealedCard({
-                    letter,
-                    onread: () => m.route.set(app.route('time-capsule.letter', { id: letter.id })),
-                    ondelete: () => this.remove(letter),
-                  })
-                )}
-              </div>
-            ) : (
-              <div className="TimeCapsuleEmpty">
-                <Icon name="far fa-envelope" />
-                <p>{t('page.sealed_empty')}</p>
-                {data.can.create && (
-                  <Button className="Button" icon="fas fa-feather" onclick={() => this.compose()}>
-                    {t('page.write_first')}
-                  </Button>
-                )}
-              </div>
-            )}
-          </section>
-        )}
+        {app.session.user && this.sealedSection(data, sealed)}
 
         {opened.length > 0 && (
           <section className="TimeCapsuleSection">
@@ -199,24 +169,54 @@ export default class TimeCapsulePage extends Page {
           )}
         </section>
 
-        {data.opened.length > 0 && (
-          <section className="TimeCapsuleSection">
-            <h3 className="TimeCapsuleSection-title">
-              <Icon name="fas fa-box-open" /> {t('page.community_past_title')}
-            </h3>
-            <ul className="TimeCapsulePast">
-              {data.opened.map((c) => (
-                <li>
-                  <Link href={app.route('time-capsule.community', { id: c.id })}>
-                    <strong>{c.title}</strong>
-                    <span>{t('community.opened_summary', { date: longDate(c.openedAt!), letters: c.letters, members: c.members })}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {data.opened.length > 0 && this.pastSection(data)}
       </div>
+    );
+  }
+
+  /** Your sealed letters, soonest first, or the invitation to write one. */
+  sealedSection(data: PageData, sealed: Letter[]): Mithril.Children {
+    return (
+      <section className="TimeCapsuleSection">
+        <h3 className="TimeCapsuleSection-title">
+          <Icon name="fas fa-envelope" /> {t('page.sealed_title')}
+          {sealed.length > 0 && <span className="TimeCapsuleSection-count">{sealed.length}</span>}
+        </h3>
+        {sealed.length ? (
+          this.sealedGrid(sealed)
+        ) : (
+          <div className="TimeCapsuleEmpty">
+            <Icon name="far fa-envelope" />
+            <p>{t('page.sealed_empty')}</p>
+            {data.can.create && (
+              <Button className="Button" icon="fas fa-feather" onclick={() => this.compose()}>
+                {t('page.write_first')}
+              </Button>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  /** Community capsules that have opened. */
+  pastSection(data: PageData): Mithril.Children {
+    return (
+      <section className="TimeCapsuleSection">
+        <h3 className="TimeCapsuleSection-title">
+          <Icon name="fas fa-box-open" /> {t('page.community_past_title')}
+        </h3>
+        <ul className="TimeCapsulePast">
+          {data.opened.map((c) => (
+            <li>
+              <Link href={app.route('time-capsule.community', { id: c.id })}>
+                <strong>{c.title}</strong>
+                <span>{t('community.opened_summary', { date: longDate(c.openedAt!), letters: c.letters, members: c.members })}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     );
   }
 
@@ -327,57 +327,69 @@ export default class TimeCapsulePage extends Page {
     return (
       <div className="TimeCapsulePage-communityView">
         {this.back()}
-        {c.openedAt ? (
-          <header className="TimeCapsuleCommunity TimeCapsuleCommunity--opened">
-            <div className="TimeCapsuleCommunity-label">
-              <Icon name="fas fa-box-open" /> {t('community.label')}
-            </div>
-            <h2 className="TimeCapsuleCommunity-title">{c.title}</h2>
-            {c.description && <p className="TimeCapsuleCommunity-description">{c.description}</p>}
-            <p className="TimeCapsuleCommunity-when">
-              {t('community.opened_summary', { date: longDate(c.openedAt), letters: c.letters, members: c.members })} ·{' '}
-              {t('community.waited', { time: duration(new Date(c.createdAt), new Date(c.openedAt)) })}
-            </p>
-            {c.discussionId && (
-              <Link className="Button" href={app.route('discussion', { id: c.discussionId })}>
-                <Icon name="far fa-comments" /> {t('letter.discussion')}
-              </Link>
+        {c.openedAt ? this.openedHeader(c) : this.communityHero(c)}
+        {c.openedAt
+          ? this.openedLetters(letters, more)
+          : letters.length > 0 && (
+              <section className="TimeCapsuleSection">
+                <h3 className="TimeCapsuleSection-title">
+                  <Icon name="fas fa-envelope" /> {t('community.your_letters')}
+                </h3>
+                {this.sealedGrid(letters)}
+              </section>
             )}
-          </header>
-        ) : (
-          this.communityHero(c)
-        )}
+      </div>
+    );
+  }
 
-        {c.openedAt ? (
-          <div className="TimeCapsuleLetters">
-            {letters.length ? (
-              letters.map((letter) => <LetterView letter={letter} compact ondelete={() => this.remove(letter)} />)
-            ) : (
-              <p className="TimeCapsuleSection-empty">{t('community.empty')}</p>
-            )}
-            {more && (
-              <Button className="Button TimeCapsuleLetters-more" loading={this.loadingMore} onclick={() => this.more()}>
-                {t('community.more')}
-              </Button>
-            )}
-          </div>
+  /** Sealed cards: read (when the writer kept a key) or delete. */
+  sealedGrid(letters: Letter[]): Mithril.Children {
+    return (
+      <div className="TimeCapsuleGrid">
+        {letters.map((letter) =>
+          SealedCard({
+            letter,
+            onread: () => m.route.set(app.route('time-capsule.letter', { id: letter.id })),
+            ondelete: () => this.remove(letter),
+          })
+        )}
+      </div>
+    );
+  }
+
+  openedHeader(c: CommunityRow): Mithril.Children {
+    return (
+      <header className="TimeCapsuleCommunity TimeCapsuleCommunity--opened">
+        <div className="TimeCapsuleCommunity-label">
+          <Icon name="fas fa-box-open" /> {t('community.label')}
+        </div>
+        <h2 className="TimeCapsuleCommunity-title">{c.title}</h2>
+        {c.description && <p className="TimeCapsuleCommunity-description">{c.description}</p>}
+        <p className="TimeCapsuleCommunity-when">
+          {t('community.opened_summary', { date: longDate(c.openedAt!), letters: c.letters, members: c.members })} ·{' '}
+          {t('community.waited', { time: duration(new Date(c.createdAt), new Date(c.openedAt!)) })}
+        </p>
+        {c.discussionId && (
+          <Link className="Button" href={app.route('discussion', { id: c.discussionId })}>
+            <Icon name="far fa-comments" /> {t('letter.discussion')}
+          </Link>
+        )}
+      </header>
+    );
+  }
+
+  openedLetters(letters: Letter[], more: boolean): Mithril.Children {
+    return (
+      <div className="TimeCapsuleLetters">
+        {letters.length ? (
+          letters.map((letter) => <LetterView letter={letter} compact ondelete={() => this.remove(letter)} />)
         ) : (
-          letters.length > 0 && (
-            <section className="TimeCapsuleSection">
-              <h3 className="TimeCapsuleSection-title">
-                <Icon name="fas fa-envelope" /> {t('community.your_letters')}
-              </h3>
-              <div className="TimeCapsuleGrid">
-                {letters.map((letter) =>
-                  SealedCard({
-                    letter,
-                    onread: () => m.route.set(app.route('time-capsule.letter', { id: letter.id })),
-                    ondelete: () => this.remove(letter),
-                  })
-                )}
-              </div>
-            </section>
-          )
+          <p className="TimeCapsuleSection-empty">{t('community.empty')}</p>
+        )}
+        {more && (
+          <Button className="Button TimeCapsuleLetters-more" loading={this.loadingMore} onclick={() => this.more()}>
+            {t('community.more')}
+          </Button>
         )}
       </div>
     );

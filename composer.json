@@ -64,6 +64,10 @@
         "flarum/tags": "^2.0",
         "flarum/testing": "^2.0"
     },
+    "suggest": {
+        "flarum/gdpr": "Exports and erases members' letters with their data.",
+        "flarum/tags": "Puts opened letters' discussions in a tag."
+    },
     "scripts": {
         "test": [
             "@test:integration"

@@ -13,6 +13,11 @@ use Flarum\Gdpr\Data\Type;
  * on the forum (opened, or sealed with "let me reread it"). A moderator's
  * export of someone else never carries a word of their letters. Gone, photos
  * too, on erasure. Registered only when flarum/gdpr is enabled.
+ *
+ * resolve() rather than constructor injection on purpose: flarum/gdpr builds
+ * every data type itself with `new $type($user, null, $factory, ...)`
+ * (Exporter.php), never through the container, so a constructor of our own
+ * would never receive a Vault or Photos.
  */
 class TimeCapsuleData extends Type
 {

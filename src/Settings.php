@@ -14,7 +14,6 @@ final class Settings
     public const MAX_YEARS = 'time-capsule.max_years';
     public const FOUNDED = 'time-capsule.founded';
 
-    public const DEFAULT_MAX_YEARS = 25;
     public const MAX_LENGTH = 20000;
     public const MAX_ENVELOPE = 80;
     public const MAX_PHOTOS = 4;

@@ -1,5 +1,2 @@
-import app from 'flarum/admin/app';
-
+// Every setting and permission is registered in ./extend.
 export { default as extend } from './extend';
-
-app.initializers.add('ernestdefoe/time-capsule', () => {});

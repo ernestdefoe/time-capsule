@@ -3,9 +3,9 @@
 namespace ErnestDefoe\TimeCapsule\Api;
 
 use Carbon\Carbon;
+use Carbon\Exceptions\InvalidFormatException;
 use ErnestDefoe\TimeCapsule\Settings;
 use Flarum\Settings\SettingsRepositoryInterface;
-use Throwable;
 
 /** Reading a form that came as JSON or as multipart (letters with photos). */
 final class Input
@@ -38,7 +38,8 @@ final class Input
 
         try {
             $at = Carbon::parse($value)->utc();
-        } catch (Throwable) {
+        } catch (InvalidFormatException) {
+            // Shaped like a date but not one (month 13): the form says the date is wrong.
             return null;
         }
 
@@ -51,7 +52,7 @@ final class Input
 
     public static function maxYears(SettingsRepositoryInterface $settings): int
     {
-        return max(1, min(100, (int) ($settings->get(Settings::MAX_YEARS) ?: Settings::DEFAULT_MAX_YEARS)));
+        return max(1, min(100, (int) $settings->get(Settings::MAX_YEARS)));
     }
 
     public static function words(string $text): int

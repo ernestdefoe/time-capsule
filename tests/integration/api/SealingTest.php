@@ -313,4 +313,35 @@ class SealingTest extends TestCase
         [, $body] = $this->seal();
         $this->assertSame(204, $this->send_('DELETE', '/api/time-capsule/'.$body['capsule']['id'], 1)[0]);
     }
+
+    #[Test]
+    public function a_first_key_being_written_by_another_request_asks_to_try_again()
+    {
+        $key = $this->app()->getContainer()->make(\Flarum\Foundation\Paths::class)->storage.'/time-capsule/key';
+        @unlink($key);
+        $lock = $this->app()->getContainer()->make(\Illuminate\Contracts\Cache\Repository::class)->lock('time-capsule:key', 10);
+        $this->assertTrue($lock->get());
+
+        [$status, $error] = $this->seal();
+        $this->assertSame(503, $status);
+        $this->assertSame('time_capsule_busy', $error['errors'][0]['code']);
+        $this->assertFileDoesNotExist($key);
+        $this->assertSame(0, $this->database()->table('time_capsules')->count());
+
+        $lock->release();
+        $this->assertSame(201, $this->seal()[0]);
+        $this->assertFileExists($key);
+    }
+
+    #[Test]
+    public function deleting_a_member_deletes_their_photo_files()
+    {
+        $this->seal([], 2, [$this->photo()]);
+        $file = $this->app()->getContainer()->make(\Flarum\Foundation\Paths::class)->storage.'/time-capsule/photos/'.$this->database()->table('time_capsule_photos')->value('file');
+        $this->assertFileExists($file);
+
+        $this->assertSame(204, $this->send_('DELETE', '/api/users/2', 1)[0]);
+        $this->assertSame(0, $this->database()->table('time_capsule_photos')->count());
+        $this->assertFileDoesNotExist($file);
+    }
 }

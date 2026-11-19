@@ -7,8 +7,6 @@ import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
 import { call, dateInput, duration, localMidnight, presets, t, type CommunityRow, type Letter, type PageData, type Preset } from '../api';
 
-declare const m: Mithril.Static;
-
 interface Attrs extends IFormModalAttrs {
   community: CommunityRow | null;
   toCommunity: boolean;
@@ -104,152 +102,16 @@ export default class SealModal extends FormModal<Attrs> {
 
     const limits = this.limits();
     const opens = this.opensAt();
-    const community = this.attrs.community;
-    const min = new Date(Date.now() + 864e5 + limits.minHours * 36e5);
-    const max = new Date();
-    max.setFullYear(max.getFullYear() + limits.maxYears);
 
     return (
       <div className="Modal-body">
-        {community && !community.openedAt && (
-          <div className="TimeCapsuleSeal-where" role="radiogroup" aria-label={extractText(t('seal.where'))}>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!this.toCommunity}
-              className={'TimeCapsuleChip' + (!this.toCommunity ? ' is-active' : '')}
-              onclick={() => (this.toCommunity = false)}
-            >
-              <Icon name="fas fa-user" /> {t('seal.where_mine')}
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={this.toCommunity}
-              className={'TimeCapsuleChip' + (this.toCommunity ? ' is-active' : '')}
-              onclick={() => (this.toCommunity = true)}
-            >
-              <Icon name="fas fa-box-archive" /> {t('seal.where_community', { title: community.title })}
-            </button>
-          </div>
-        )}
-
-        <div className="Form-group">
-          <label for="TimeCapsule-body">{t('seal.body_label')}</label>
-          <textarea
-            id="TimeCapsule-body"
-            className="FormControl TimeCapsuleSeal-body"
-            rows={9}
-            maxlength={limits.maxLength}
-            placeholder={extractText(t(this.toCommunity ? 'seal.body_placeholder_community' : 'seal.body_placeholder'))}
-            value={this.body}
-            oninput={(e: InputEvent) => (this.body = (e.target as HTMLTextAreaElement).value)}
-          />
-          {this.body.length > limits.maxLength * 0.8 && (
-            <p className="helpText">{t('seal.length', { count: limits.maxLength - this.body.length })}</p>
-          )}
-        </div>
-
+        {this.whereField()}
+        {this.bodyField(limits.maxLength)}
         {this.photoField(limits.maxPhotos)}
-
-        <div className="Form-group">
-          <label for="TimeCapsule-envelope">{t('seal.envelope_label')}</label>
-          <input
-            id="TimeCapsule-envelope"
-            className="FormControl"
-            maxlength={80}
-            placeholder={extractText(t('seal.envelope_placeholder'))}
-            value={this.envelope}
-            oninput={(e: InputEvent) => (this.envelope = (e.target as HTMLInputElement).value)}
-          />
-          <p className="helpText">{t('seal.envelope_help')}</p>
-        </div>
-
-        {!this.toCommunity && (
-          <fieldset className="Form-group TimeCapsuleSeal-when">
-            <legend>{t('seal.when_label')}</legend>
-            <div className="TimeCapsuleChips" role="radiogroup">
-              {this.presetList.map((p) => (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={this.preset === p.key}
-                  className={'TimeCapsuleChip' + (this.preset === p.key ? ' is-active' : '')}
-                  onclick={() => (this.preset = p.key)}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={this.preset === 'custom'}
-                className={'TimeCapsuleChip' + (this.preset === 'custom' ? ' is-active' : '')}
-                onclick={() => (this.preset = 'custom')}
-              >
-                <Icon name="far fa-calendar" /> {t('seal.preset.custom')}
-              </button>
-            </div>
-            {this.preset === 'custom' && (
-              <input
-                type="date"
-                className="FormControl TimeCapsuleSeal-date"
-                aria-label={extractText(t('seal.preset.custom'))}
-                min={dateInput(min)}
-                max={dateInput(max)}
-                value={this.custom}
-                oninput={(e: InputEvent) => (this.custom = (e.target as HTMLInputElement).value)}
-              />
-            )}
-          </fieldset>
-        )}
-
-        {opens && (
-          <p className="TimeCapsuleSeal-summary">
-            <Icon name="fas fa-hourglass-half" />{' '}
-            {t('seal.opens_summary', {
-              date: new Intl.DateTimeFormat(app.translator.getLocale() || undefined, {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              }).format(opens),
-              time: duration(new Date(), opens),
-            })}
-          </p>
-        )}
-
-        {!this.toCommunity && (
-          <fieldset className="Form-group">
-            <legend>{t('seal.after_label')}</legend>
-            <div className="TimeCapsuleChips" role="radiogroup">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={this.visibility === 'private'}
-                className={'TimeCapsuleChip' + (this.visibility === 'private' ? ' is-active' : '')}
-                onclick={() => (this.visibility = 'private')}
-              >
-                <Icon name="fas fa-lock" /> {t('seal.private')}
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={this.visibility === 'public'}
-                className={'TimeCapsuleChip' + (this.visibility === 'public' ? ' is-active' : '')}
-                onclick={() => (this.visibility = 'public')}
-              >
-                <Icon name="fas fa-users" /> {t('seal.public')}
-              </button>
-            </div>
-            <p className="helpText">{this.visibility === 'public' ? t('seal.public_help') : t('seal.private_help')}</p>
-            {this.visibility === 'public' && this.attrs.canPost && (
-              <Switch state={this.post} onchange={(value: boolean) => (this.post = value)}>
-                {t('seal.post')}
-              </Switch>
-            )}
-          </fieldset>
-        )}
+        {this.envelopeField()}
+        {!this.toCommunity && this.whenField(limits)}
+        {opens && this.summary(opens)}
+        {!this.toCommunity && this.afterField()}
         {this.toCommunity && (
           <p className="helpText TimeCapsuleSeal-communityNote">{t('seal.community_note', { date: opens ? opens.toLocaleDateString() : '' })}</p>
         )}
@@ -277,17 +139,158 @@ export default class SealModal extends FormModal<Attrs> {
     );
   }
 
-  photoField(max: number): Mithril.Children {
-    const add = (files: FileList | null) => {
-      if (!files) return;
-      for (const file of Array.from(files)) {
-        if (this.photos.length >= max) break;
-        if (!file.type.startsWith('image/')) continue;
-        this.photos.push({ file, url: URL.createObjectURL(file) });
-      }
-      m.redraw();
-    };
+  /** One choice in a row of chips (role="radio" inside a radiogroup). */
+  chip(active: boolean, choose: () => void, children: Mithril.Children): Mithril.Children {
+    return (
+      <button type="button" role="radio" aria-checked={active} className={'TimeCapsuleChip' + (active ? ' is-active' : '')} onclick={choose}>
+        {children}
+      </button>
+    );
+  }
 
+  /** My own letter, or one for the community capsule while it's sealed. */
+  whereField(): Mithril.Children {
+    const community = this.attrs.community;
+    if (!community || community.openedAt) return null;
+
+    return (
+      <div className="TimeCapsuleSeal-where" role="radiogroup" aria-label={extractText(t('seal.where'))}>
+        {this.chip(!this.toCommunity, () => (this.toCommunity = false), [<Icon name="fas fa-user" />, ' ', t('seal.where_mine')])}
+        {this.chip(this.toCommunity, () => (this.toCommunity = true), [
+          <Icon name="fas fa-box-archive" />,
+          ' ',
+          t('seal.where_community', { title: community.title }),
+        ])}
+      </div>
+    );
+  }
+
+  bodyField(maxLength: number): Mithril.Children {
+    return (
+      <div className="Form-group">
+        <label for="TimeCapsule-body">{t('seal.body_label')}</label>
+        <textarea
+          id="TimeCapsule-body"
+          className="FormControl TimeCapsuleSeal-body"
+          rows={9}
+          maxlength={maxLength}
+          placeholder={extractText(t(this.toCommunity ? 'seal.body_placeholder_community' : 'seal.body_placeholder'))}
+          value={this.body}
+          oninput={(e: InputEvent) => (this.body = (e.target as HTMLTextAreaElement).value)}
+        />
+        {this.body.length > maxLength * 0.8 && <p className="helpText">{t('seal.length', { count: maxLength - this.body.length })}</p>}
+      </div>
+    );
+  }
+
+  envelopeField(): Mithril.Children {
+    return (
+      <div className="Form-group">
+        <label for="TimeCapsule-envelope">{t('seal.envelope_label')}</label>
+        <input
+          id="TimeCapsule-envelope"
+          className="FormControl"
+          maxlength={80}
+          placeholder={extractText(t('seal.envelope_placeholder'))}
+          value={this.envelope}
+          oninput={(e: InputEvent) => (this.envelope = (e.target as HTMLInputElement).value)}
+        />
+        <p className="helpText">{t('seal.envelope_help')}</p>
+      </div>
+    );
+  }
+
+  /** The open-date presets, or a date of the writer's own between the soonest and furthest allowed. */
+  whenField(limits: { minHours: number; maxYears: number }): Mithril.Children {
+    const min = new Date(Date.now() + 864e5 + limits.minHours * 36e5);
+    const max = new Date();
+    max.setFullYear(max.getFullYear() + limits.maxYears);
+
+    return (
+      <fieldset className="Form-group TimeCapsuleSeal-when">
+        <legend>{t('seal.when_label')}</legend>
+        <div className="TimeCapsuleChips" role="radiogroup">
+          {this.presetList.map((p) => this.chip(this.preset === p.key, () => (this.preset = p.key), p.label))}
+          {this.chip(this.preset === 'custom', () => (this.preset = 'custom'), [<Icon name="far fa-calendar" />, ' ', t('seal.preset.custom')])}
+        </div>
+        {this.preset === 'custom' && (
+          <input
+            type="date"
+            className="FormControl TimeCapsuleSeal-date"
+            aria-label={extractText(t('seal.preset.custom'))}
+            min={dateInput(min)}
+            max={dateInput(max)}
+            value={this.custom}
+            oninput={(e: InputEvent) => (this.custom = (e.target as HTMLInputElement).value)}
+          />
+        )}
+      </fieldset>
+    );
+  }
+
+  summary(opens: Date): Mithril.Children {
+    const date = new Intl.DateTimeFormat(app.translator.getLocale() || undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(opens);
+
+    return (
+      <p className="TimeCapsuleSeal-summary">
+        <Icon name="fas fa-hourglass-half" /> {t('seal.opens_summary', { date, time: duration(new Date(), opens) })}
+      </p>
+    );
+  }
+
+  /** Who reads it when it opens, and whether it starts a discussion. */
+  afterField(): Mithril.Children {
+    return (
+      <fieldset className="Form-group">
+        <legend>{t('seal.after_label')}</legend>
+        <div className="TimeCapsuleChips" role="radiogroup">
+          {this.chip(this.visibility === 'private', () => (this.visibility = 'private'), [<Icon name="fas fa-lock" />, ' ', t('seal.private')])}
+          {this.chip(this.visibility === 'public', () => (this.visibility = 'public'), [<Icon name="fas fa-users" />, ' ', t('seal.public')])}
+        </div>
+        <p className="helpText">{this.visibility === 'public' ? t('seal.public_help') : t('seal.private_help')}</p>
+        {this.visibility === 'public' && this.attrs.canPost && (
+          <Switch state={this.post} onchange={(value: boolean) => (this.post = value)}>
+            {t('seal.post')}
+          </Switch>
+        )}
+      </fieldset>
+    );
+  }
+
+  /** Adds picked or dropped images, up to the limit. */
+  addPhotos(files: FileList | null, max: number) {
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (this.photos.length >= max) break;
+      if (!file.type.startsWith('image/')) continue;
+      this.photos.push({ file, url: URL.createObjectURL(file) });
+    }
+    m.redraw();
+  }
+
+  photoThumb(photo: { file: File; url: string }, i: number): Mithril.Children {
+    return (
+      <div className="TimeCapsulePhotos-item">
+        <img src={photo.url} alt="" />
+        <Button
+          className="Button Button--icon TimeCapsulePhotos-remove"
+          icon="fas fa-xmark"
+          aria-label={extractText(t('seal.photo_remove'))}
+          onclick={() => {
+            URL.revokeObjectURL(photo.url);
+            this.photos.splice(i, 1);
+          }}
+        />
+      </div>
+    );
+  }
+
+  photoField(max: number): Mithril.Children {
     return (
       <div className="Form-group">
         <label>{t('seal.photos_label', { count: max })}</label>
@@ -303,23 +306,10 @@ export default class SealModal extends FormModal<Attrs> {
           ondrop={(e: DragEvent) => {
             e.preventDefault();
             this.dragging = false;
-            add(e.dataTransfer?.files || null);
+            this.addPhotos(e.dataTransfer?.files || null, max);
           }}
         >
-          {this.photos.map((photo, i) => (
-            <div className="TimeCapsulePhotos-item">
-              <img src={photo.url} alt="" />
-              <Button
-                className="Button Button--icon TimeCapsulePhotos-remove"
-                icon="fas fa-xmark"
-                aria-label={extractText(t('seal.photo_remove'))}
-                onclick={() => {
-                  URL.revokeObjectURL(photo.url);
-                  this.photos.splice(i, 1);
-                }}
-              />
-            </div>
-          ))}
+          {this.photos.map((photo, i) => this.photoThumb(photo, i))}
           {this.photos.length < max && (
             <label className="TimeCapsulePhotos-add">
               <Icon name="fas fa-camera" />
@@ -330,7 +320,7 @@ export default class SealModal extends FormModal<Attrs> {
                 multiple
                 onchange={(e: Event) => {
                   const input = e.target as HTMLInputElement;
-                  add(input.files);
+                  this.addPhotos(input.files, max);
                   input.value = '';
                 }}
               />

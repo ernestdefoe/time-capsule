@@ -3,8 +3,6 @@ import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
 import { span, t } from '../api';
 
-declare const m: Mithril.Static;
-
 interface Attrs extends ComponentAttrs {
   to: string;
   ondone?: () => void;

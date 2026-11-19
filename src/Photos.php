@@ -3,14 +3,16 @@
 namespace ErnestDefoe\TimeCapsule;
 
 use Illuminate\Support\Collection;
+use Intervention\Image\Exceptions\RuntimeException as ImageException;
 use Intervention\Image\ImageManager;
 use Psr\Http\Message\UploadedFileInterface;
-use Throwable;
+use RuntimeException;
 
 /**
  * Photos are re-encoded on the server (orientation applied, scaled down,
  * metadata such as GPS dropped by the re-encode), encrypted like the letter,
- * and kept under storage/, where no URL reaches them. PhotoController serves
+ * and kept on the extension's private disk (storage/time-capsule/photos by
+ * default), where no URL reaches them. PhotoController serves
  * one only to a viewer who may read its letter.
  */
 class Photos
@@ -50,16 +52,16 @@ class Photos
             }
             $image->scaleDown(self::MAX_SIDE, self::MAX_SIDE);
             $bytes = (string) $image->toWebp(82);
-        } catch (Throwable) {
+        } catch (ImageException) {
+            // Not an image GD can decode (the browser checked the type; this is a damaged or disguised file).
             return null;
         }
 
         $file = bin2hex(random_bytes(16)).'.bin';
-        $dir = $this->directory();
-        if (! is_dir($dir)) {
-            @mkdir($dir, 0770, true);
+        // A disk that couldn't write says so with false: stop here, before a row points at nothing.
+        if ($this->vault->disk()->put($this->path($file), $this->vault->sealBytes($bytes, self::context($userId))) !== true) {
+            throw new RuntimeException('Time Capsule could not write a photo to the '.Vault::DISK.' disk.');
         }
-        file_put_contents($dir.'/'.$file, $this->vault->sealBytes($bytes, self::context($userId)));
 
         return ['file' => $file, 'width' => $image->width(), 'height' => $image->height()];
     }
@@ -98,19 +100,20 @@ class Photos
     /** The decrypted WebP, or null. */
     public function read(Photo $photo, int $userId): ?string
     {
-        $path = $this->path($photo->file);
-        if (! is_file($path)) {
-            return null;
-        }
+        $bytes = $this->vault->disk()->get($this->path($photo->file));
 
-        return $this->vault->openBytes((string) file_get_contents($path), self::context($userId));
+        return $bytes === null ? null : $this->vault->openBytes($bytes, self::context($userId));
     }
 
     /** @param iterable<string> $files */
     public function forget(iterable $files): void
     {
+        $paths = [];
         foreach ($files as $file) {
-            @unlink($this->path($file));
+            $paths[] = $this->path($file);
+        }
+        if ($paths !== []) {
+            $this->vault->disk()->delete($paths);
         }
     }
 
@@ -130,15 +133,10 @@ class Photos
         }
     }
 
-    private function directory(): string
-    {
-        return $this->vault->directory().'/photos';
-    }
-
     private function path(string $file): string
     {
         // Names are ours (hex + .bin); basename() keeps a damaged row from reaching outside.
-        return $this->directory().'/'.basename($file);
+        return 'photos/'.basename($file);
     }
 
     private static function context(int $userId): string
